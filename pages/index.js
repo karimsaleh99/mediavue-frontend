@@ -1,26 +1,27 @@
 import { useState, useEffect, useRef } from "react";
 
 const API_URL = "https://mediavue-backend-production.up.railway.app";
-
-const FREE_STORY_LIMIT = 5;
+const FREE_LIMIT = 5;
+const STORAGE_KEY = "mv_reads";
+const RESET_KEY = "mv_reset";
 
 const SOURCES = [
-  { id: "lemonde", name: "Le Monde", orientation: "centre-gauche", orientationScore: 2, factuality: "Élevée", owner: "Xavier Niel / Matthieu Pigasse", ownerType: "milliardaires indépendants", logo: "LM", color: "#1a1a2e" },
-  { id: "lefigaro", name: "Le Figaro", orientation: "droite", orientationScore: 4, factuality: "Élevée", owner: "Famille Dassault", ownerType: "groupe industriel", logo: "LF", color: "#8b1a1a" },
-  { id: "liberation", name: "Libération", orientation: "gauche", orientationScore: 1, factuality: "Élevée", owner: "Altice / Patrick Drahi", ownerType: "milliardaire télécom", logo: "LIB", color: "#c0392b" },
+  { id: "lemonde", name: "Le Monde", orientation: "centre-gauche", orientationScore: 2, factuality: "Élevée", owner: "Xavier Niel / Matthieu Pigasse", ownerType: "milliardaires indépendants", logo: "LM", color: "#4a90d9" },
+  { id: "lefigaro", name: "Le Figaro", orientation: "droite", orientationScore: 4, factuality: "Élevée", owner: "Famille Dassault", ownerType: "groupe industriel", logo: "LF", color: "#c0392b" },
+  { id: "liberation", name: "Libération", orientation: "gauche", orientationScore: 1, factuality: "Élevée", owner: "Altice / Patrick Drahi", ownerType: "milliardaire télécom", logo: "LIB", color: "#e74c3c" },
   { id: "mediapart", name: "Médiapart", orientation: "gauche", orientationScore: 0, factuality: "Élevée", owner: "Indépendant", ownerType: "indépendant", logo: "MP", color: "#e74c3c" },
-  { id: "bfmtv", name: "BFMTV", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "Altice / Patrick Drahi", ownerType: "milliardaire télécom", logo: "BFM", color: "#2980b9" },
-  { id: "lesechos", name: "Les Échos", orientation: "centre-droite", orientationScore: 4, factuality: "Élevée", owner: "Bernard Arnault (LVMH)", ownerType: "milliardaire luxe", logo: "LE", color: "#16a085" },
-  { id: "cnews", name: "CNews", orientation: "droite extrême", orientationScore: 5, factuality: "Mixte", owner: "Vincent Bolloré (Vivendi)", ownerType: "milliardaire conservateur", logo: "CN", color: "#2c3e50" },
-  { id: "franceinfo", name: "France Info", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "France Télévisions (public)", ownerType: "service public", logo: "FI", color: "#e67e22" },
-  { id: "france24", name: "France 24", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "France Médias Monde (public)", ownerType: "service public", logo: "F24", color: "#16a085" },
+  { id: "bfmtv", name: "BFMTV", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "Altice / Patrick Drahi", ownerType: "milliardaire télécom", logo: "BFM", color: "#3498db" },
+  { id: "lesechos", name: "Les Échos", orientation: "centre-droite", orientationScore: 4, factuality: "Élevée", owner: "Bernard Arnault (LVMH)", ownerType: "milliardaire luxe", logo: "LE", color: "#1abc9c" },
+  { id: "cnews", name: "CNews", orientation: "droite extrême", orientationScore: 5, factuality: "Mixte", owner: "Vincent Bolloré (Vivendi)", ownerType: "milliardaire conservateur", logo: "CN", color: "#7f8c8d" },
+  { id: "franceinfo", name: "France Info", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "France Télévisions", ownerType: "service public", logo: "FI", color: "#e67e22" },
+  { id: "france24", name: "France 24", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "France Médias Monde", ownerType: "service public", logo: "F24", color: "#27ae60" },
   { id: "leparisien", name: "Le Parisien", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "Bernard Arnault (LVMH)", ownerType: "milliardaire luxe", logo: "LP", color: "#d35400" },
   { id: "blast", name: "Blast", orientation: "gauche", orientationScore: 0, factuality: "Moyenne", owner: "Indépendant", ownerType: "indépendant", logo: "BL", color: "#8e44ad" },
   { id: "marianne", name: "Marianne", orientation: "centre-gauche", orientationScore: 2, factuality: "Moyenne", owner: "Czech Media Invest", ownerType: "milliardaire étranger", logo: "MAR", color: "#2980b9" },
   { id: "lepoint", name: "Le Point", orientation: "droite", orientationScore: 4, factuality: "Élevée", owner: "François Pinault", ownerType: "milliardaire luxe", logo: "PT", color: "#2c3e50" },
-  { id: "valeursactuelles", name: "Valeurs Actuelles", orientation: "droite extrême", orientationScore: 5, factuality: "Faible", owner: "Groupe Valmonde", ownerType: "groupe conservateur", logo: "VA", color: "#7f8c8d" },
+  { id: "valeursactuelles", name: "Valeurs Actuelles", orientation: "droite extrême", orientationScore: 5, factuality: "Faible", owner: "Groupe Valmonde", ownerType: "groupe conservateur", logo: "VA", color: "#95a5a6" },
   { id: "20minutes", name: "20 Minutes", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "Rossel", ownerType: "groupe de presse", logo: "20M", color: "#27ae60" },
-  { id: "ouestfrance", name: "Ouest-France", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "Association SIPA", ownerType: "indépendant", logo: "OF", color: "#2c3e50" },
+  { id: "ouestfrance", name: "Ouest-France", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "Association SIPA", ownerType: "indépendant", logo: "OF", color: "#34495e" },
   { id: "lobs", name: "L'Obs", orientation: "centre-gauche", orientationScore: 1, factuality: "Élevée", owner: "Groupe Le Monde", ownerType: "milliardaires indépendants", logo: "OBS", color: "#d35400" },
   { id: "humanite", name: "L'Humanité", orientation: "gauche", orientationScore: 0, factuality: "Moyenne", owner: "Société coopérative", ownerType: "indépendant", logo: "HUM", color: "#c0392b" },
   { id: "lacroix", name: "La Croix", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "Groupe Bayard", ownerType: "groupe catholique", logo: "CRX", color: "#8e44ad" },
@@ -34,7 +35,7 @@ const OWNER_TYPE_COLOR = {
   "milliardaires indépendants": "#f39c12",
   "milliardaire télécom": "#e74c3c",
   "milliardaire conservateur": "#8e44ad",
-  "milliardaire luxe": "#2980b9",
+  "milliardaire luxe": "#3498db",
   "groupe industriel": "#7f8c8d",
   "service public": "#27ae60",
   "milliardaire étranger": "#e67e22",
@@ -43,237 +44,261 @@ const OWNER_TYPE_COLOR = {
   "groupe conservateur": "#7f8c8d",
 };
 
-const ORIENTATION_COLOR = {
+const ORI_COLOR = {
   "gauche": "#e74c3c",
   "centre-gauche": "#e67e22",
   "centre": "#95a5a6",
   "centre-droite": "#3498db",
-  "droite": "#2c3e50",
-  "droite extrême": "#1a252f",
+  "droite": "#7f8c8d",
+  "droite extrême": "#4a4a4a",
 };
 
-function getSourceMeta(id) {
-  return SOURCES.find(s => s.id === id) || { logo: id?.slice(0, 2).toUpperCase(), color: "#888", name: id, orientation: "centre", orientationScore: 3 };
+function getSource(id) {
+  return SOURCES.find(s => s.id === id) || { logo: (id || "??").slice(0, 2).toUpperCase(), color: "#555", name: id, orientation: "centre", orientationScore: 3, owner: "Inconnu", ownerType: "inconnu" };
 }
 
-function getCoverageScore(coverage) {
-  const g = coverage?.gauche || 0;
-  const c = coverage?.centre || 0;
-  const d = coverage?.droite || 0;
+function isBreaking(story) {
+  if (!story.published_at) return false;
+  const age = (Date.now() - new Date(story.published_at)) / 1000 / 60 / 60;
+  return age < 2 && (story.coverage_count || 0) >= 3;
+}
+
+function getCoverageScore(cov) {
+  const g = cov?.gauche || 0, c = cov?.centre || 0, d = cov?.droite || 0;
   const total = g + c + d;
   if (total === 0) return 0;
   const sides = [g > 0, c > 0, d > 0].filter(Boolean).length;
   return Math.round((sides / 3) * 100);
 }
 
-function ScoreBadge({ score }) {
-  const color = score >= 80 ? "#27ae60" : score >= 50 ? "#f39c12" : "#e74c3c";
-  const label = score >= 80 ? "Équilibré" : score >= 50 ? "Partiel" : "Biaisé";
+function getReadsToday() {
+  try {
+    const reset = localStorage.getItem(RESET_KEY);
+    const today = new Date().toDateString();
+    if (reset !== today) {
+      localStorage.setItem(RESET_KEY, today);
+      localStorage.setItem(STORAGE_KEY, "0");
+      return 0;
+    }
+    return parseInt(localStorage.getItem(STORAGE_KEY) || "0");
+  } catch { return 0; }
+}
+
+function incrementReads() {
+  try {
+    const reads = getReadsToday();
+    localStorage.setItem(STORAGE_KEY, String(reads + 1));
+    return reads + 1;
+  } catch { return 0; }
+}
+
+// ── Components ────────────────────────────────────────────────────────────────
+
+function Logo({ size = 22 }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-      <div style={{ width: "32px", height: "32px", borderRadius: "50%", border: `2px solid ${color}`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", fontWeight: "600", color }}>
-        {score}
-      </div>
-      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color, letterSpacing: "0.06em", textTransform: "uppercase" }}>{label}</span>
+    <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+      <svg width={size} height={size} viewBox="0 0 28 28" fill="none">
+        <rect width="28" height="28" rx="5" fill="#e74c3c" />
+        <rect x="4" y="16" width="5" height="8" rx="1" fill="white" />
+        <rect x="11" y="10" width="5" height="14" rx="1" fill="white" opacity="0.8" />
+        <rect x="18" y="13" width="5" height="11" rx="1" fill="white" opacity="0.55" />
+      </svg>
+      <span style={{ fontFamily: "'Playfair Display', serif", fontSize: size * 1.15, fontWeight: "900", color: "white", letterSpacing: "-0.03em", lineHeight: 1 }}>MédiaVue</span>
     </div>
   );
 }
 
-function BiasBar({ coverage, size = "normal" }) {
-  const g = coverage?.gauche || 0;
-  const c = coverage?.centre || 0;
-  const d = coverage?.droite || 0;
+function BiasBar({ cov }) {
+  const g = cov?.gauche || 0, c = cov?.centre || 0, d = cov?.droite || 0;
   const total = g + c + d;
   if (total === 0) return null;
   return (
-    <div style={{ width: "100%" }}>
-      <div style={{ display: "flex", borderRadius: "4px", overflow: "hidden", height: size === "small" ? "6px" : "8px", gap: "1px", background: "#f0ede8" }}>
-        <div style={{ width: `${(g / total) * 100}%`, background: "#e74c3c", transition: "width 0.6s ease" }} />
-        <div style={{ width: `${(c / total) * 100}%`, background: "#bdc3c7", transition: "width 0.6s ease" }} />
-        <div style={{ width: `${(d / total) * 100}%`, background: "#2c3e50", transition: "width 0.6s ease" }} />
+    <div>
+      <div style={{ display: "flex", height: "4px", borderRadius: "2px", overflow: "hidden", gap: "1px", background: "#2a2a2a" }}>
+        <div style={{ width: `${(g / total) * 100}%`, background: "#e74c3c" }} />
+        <div style={{ width: `${(c / total) * 100}%`, background: "#555" }} />
+        <div style={{ width: `${(d / total) * 100}%`, background: "#4a90d9" }} />
       </div>
-      {size !== "small" && (
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#888" }}>
-          <span style={{ color: "#e74c3c" }}>GAUCHE {g}</span>
-          <span>CENTRE {c}</span>
-          <span style={{ color: "#2c3e50" }}>DROITE {d}</span>
-        </div>
-      )}
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#666" }}>
+        <span style={{ color: "#e74c3c" }}>G {g}</span>
+        <span>C {c}</span>
+        <span style={{ color: "#4a90d9" }}>D {d}</span>
+      </div>
     </div>
   );
 }
 
-function OrientationDot({ orientation }) {
-  const color = ORIENTATION_COLOR[orientation] || "#999";
+function ScorePill({ score }) {
+  const color = score >= 80 ? "#27ae60" : score >= 50 ? "#f39c12" : "#e74c3c";
+  const label = score >= 80 ? "Équilibré" : score >= 50 ? "Partiel" : "Unilatéral";
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "10px", fontFamily: "'IBM Plex Mono', monospace", letterSpacing: "0.08em", color, textTransform: "uppercase" }}>
-      <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, display: "inline-block" }} />
-      {orientation}
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.06em", color, border: `1px solid ${color}`, padding: "2px 7px", borderRadius: "10px" }}>
+      <span style={{ width: 5, height: 5, borderRadius: "50%", background: color, display: "inline-block" }} />
+      {label}
     </span>
   );
 }
 
-function SourceLogo({ id, size = 28 }) {
-  const src = getSourceMeta(id);
+function SrcChip({ id, size = 26 }) {
+  const s = getSource(id);
   return (
-    <div title={src.name} style={{ width: size, height: size, borderRadius: "3px", background: src.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.28, color: "white", fontFamily: "'IBM Plex Mono', monospace", fontWeight: "700", flexShrink: 0 }}>
-      {src.logo}
+    <div title={s.name} style={{ width: size, height: size, borderRadius: "4px", background: s.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.27, color: "white", fontFamily: "'IBM Plex Mono', monospace", fontWeight: "700", flexShrink: 0, opacity: 0.9 }}>
+      {s.logo}
     </div>
   );
 }
 
-function PaywallModal({ onClose, onSubscribe }) {
+function StoryCard({ story, onClick, locked, onLock }) {
+  const cov = story.coverage_by_orientation || {};
+  const srcIds = story.source_ids || [];
+  const score = getCoverageScore(cov);
+  const breaking = isBreaking(story);
+  const img = story.articles?.[0]?.image_url;
+
+  const handle = () => locked ? onLock() : onClick(story);
+
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(10,8,6,0.85)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", backdropFilter: "blur(4px)" }}>
-      <div style={{ background: "#fdfaf6", maxWidth: "480px", width: "100%", borderRadius: "4px", overflow: "hidden", boxShadow: "0 30px 100px rgba(0,0,0,0.4)" }}>
-        <div style={{ background: "#1a1714", padding: "32px", textAlign: "center" }}>
-          <div style={{ marginBottom: "16px" }}>
-            <MédiaVueLogo dark />
+    <div onClick={handle} style={{ background: "#1a1a1a", borderRadius: "12px", overflow: "hidden", cursor: "pointer", marginBottom: "12px", border: "1px solid #2a2a2a", transition: "border-color 0.2s", position: "relative" }}
+      onMouseEnter={e => e.currentTarget.style.borderColor = "#3a3a3a"}
+      onMouseLeave={e => e.currentTarget.style.borderColor = "#2a2a2a"}>
+
+      {locked && (
+        <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#e74c3c", color: "white", padding: "8px 18px", borderRadius: "20px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.08em" }}>
+            🔒 Premium requis
           </div>
-          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9b8f7a", marginBottom: "8px" }}>Accès limité</div>
-          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "24px", fontWeight: "700", color: "#fdfaf6", lineHeight: "1.2" }}>Vous avez lu 5 histoires gratuites</h2>
         </div>
-        <div style={{ padding: "32px" }}>
-          <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "15px", color: "#5a5248", lineHeight: "1.6", marginBottom: "24px" }}>
-            MédiaVue Premium vous donne accès illimité aux histoires, aux données de propriété, et à votre rapport d'angle mort personnel.
-          </p>
-          <div style={{ display: "grid", gap: "12px", marginBottom: "24px" }}>
-            {[
-              { plan: "Mensuel", price: "4,99€", period: "/mois" },
-              { plan: "Annuel", price: "49€", period: "/an", badge: "−18%" },
-            ].map(({ plan, price, period, badge }) => (
-              <button key={plan} onClick={onSubscribe} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", border: "1.5px solid #1a1714", background: "transparent", cursor: "pointer", borderRadius: "3px", fontFamily: "'Source Serif 4', serif" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span style={{ fontSize: "15px", fontWeight: "600", color: "#1a1714" }}>{plan}</span>
-                  {badge && <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", background: "#27ae60", color: "white", padding: "2px 8px", borderRadius: "2px" }}>{badge}</span>}
-                </div>
-                <span style={{ fontSize: "18px", fontWeight: "700", color: "#1a1714" }}>{price}<span style={{ fontSize: "12px", fontWeight: "400", color: "#888" }}>{period}</span></span>
-              </button>
-            ))}
+      )}
+
+      <div style={{ padding: "14px 16px 0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px", flexWrap: "wrap" }}>
+          {breaking && (
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", background: "#e74c3c", color: "white", padding: "2px 8px", borderRadius: "3px", fontWeight: "600" }}>● Breaking</span>
+          )}
+          {story.blindspot && (
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.08em", background: "#2d1f0e", color: "#f39c12", padding: "2px 8px", borderRadius: "3px", border: "1px solid #3d2f1e" }}>
+              ⚠ Angle mort · {story.blindspot.sides?.join(", ")}
+            </span>
+          )}
+          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#555", letterSpacing: "0.06em", marginLeft: "auto" }}>{story.coverage_count || srcIds.length} sources</span>
+          <ScorePill score={score} />
+        </div>
+
+        <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+          <div style={{ flex: 1 }}>
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#555", letterSpacing: "0.1em", textTransform: "uppercase" }}>{story.category || "Actualité"}</span>
+            <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: "17px", fontWeight: "700", color: "#f0ede8", lineHeight: "1.3", margin: "4px 0 8px" }}>{story.title}</h3>
+            {story.summary && <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#888", lineHeight: "1.5", margin: "0 0 10px" }}>{story.summary.slice(0, 120)}…</p>}
           </div>
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button onClick={onClose} style={{ flex: 1, padding: "12px", border: "1px solid #d0c9bf", background: "transparent", cursor: "pointer", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", color: "#888", borderRadius: "3px" }}>Continuer gratuitement</button>
-          </div>
-          <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#b0a898", textAlign: "center", marginTop: "16px", letterSpacing: "0.04em" }}>Aucune publicité · Aucun actionnaire · 100% indépendant</p>
+          {img && (
+            <div style={{ width: "80px", height: "80px", borderRadius: "8px", overflow: "hidden", flexShrink: 0 }}>
+              <img src={img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => e.target.parentElement.style.display = "none"} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ padding: "0 16px 12px" }}>
+        <BiasBar cov={cov} />
+        <div style={{ display: "flex", gap: "4px", marginTop: "10px", flexWrap: "wrap" }}>
+          {srcIds.slice(0, 8).map(id => <SrcChip key={id} id={id} />)}
+          {srcIds.length > 8 && <div style={{ width: 26, height: 26, borderRadius: "4px", background: "#2a2a2a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", color: "#555" }}>+{srcIds.length - 8}</div>}
         </div>
       </div>
     </div>
   );
 }
 
-function MédiaVueLogo({ dark = false, size = "normal" }) {
-  const textColor = dark ? "#fdfaf6" : "#1a1714";
-  const accentColor = "#e74c3c";
-  const fs = size === "large" ? 32 : 24;
-  return (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
-      <svg width={fs} height={fs} viewBox="0 0 32 32" fill="none">
-        <rect width="32" height="32" rx="4" fill={dark ? "#fdfaf6" : "#1a1714"} />
-        <rect x="6" y="14" width="6" height="12" rx="1" fill={accentColor} />
-        <rect x="13" y="8" width="6" height="18" rx="1" fill={dark ? "#1a1714" : "#fdfaf6"} opacity="0.7" />
-        <rect x="20" y="11" width="6" height="15" rx="1" fill={accentColor} opacity="0.5" />
-      </svg>
-      <span style={{ fontFamily: "'Playfair Display', serif", fontSize: fs * 1.1, fontWeight: "900", color: textColor, letterSpacing: "-0.03em", lineHeight: 1 }}>MédiaVue</span>
-    </div>
-  );
-}
-
-function SideBySideView({ articles }) {
-  const gauche = articles.filter(a => (a.orientationScore || getSourceMeta(a.source_id)?.orientationScore || 3) <= 1);
-  const centre = articles.filter(a => { const s = a.orientationScore || getSourceMeta(a.source_id)?.orientationScore || 3; return s > 1 && s < 4; });
-  const droite = articles.filter(a => (a.orientationScore || getSourceMeta(a.source_id)?.orientationScore || 3) >= 4);
-
-  const cols = [
-    { label: "Gauche", color: "#e74c3c", items: gauche },
-    { label: "Centre", color: "#95a5a6", items: centre },
-    { label: "Droite", color: "#2c3e50", items: droite },
-  ].filter(c => c.items.length > 0);
-
+function SideBySide({ articles }) {
+  const buckets = {
+    gauche: articles.filter(a => (getSource(a.source_id)?.orientationScore ?? 3) <= 1),
+    centre: articles.filter(a => { const s = getSource(a.source_id)?.orientationScore ?? 3; return s > 1 && s < 4; }),
+    droite: articles.filter(a => (getSource(a.source_id)?.orientationScore ?? 3) >= 4),
+  };
+  const cols = Object.entries(buckets).filter(([, v]) => v.length > 0);
   if (cols.length === 0) return null;
-
   return (
-    <div style={{ marginTop: "24px" }}>
-      <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9b8f7a", marginBottom: "16px" }}>Vue côte à côte</div>
+    <div style={{ marginTop: "20px" }}>
+      <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#555", marginBottom: "14px" }}>Vue côte à côte</div>
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols.length}, 1fr)`, gap: "12px" }}>
-        {cols.map(col => (
-          <div key={col.label}>
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", color: col.color, borderBottom: `2px solid ${col.color}`, paddingBottom: "6px", marginBottom: "12px" }}>{col.label}</div>
-            {col.items.map((a, i) => {
-              const src = getSourceMeta(a.source_id || a.sourceId);
-              return (
-                <div key={i} style={{ marginBottom: "12px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
-                    <SourceLogo id={a.source_id || a.sourceId} size={20} />
-                    <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#888" }}>{src.name}</span>
+        {cols.map(([key, items]) => {
+          const color = key === "gauche" ? "#e74c3c" : key === "centre" ? "#888" : "#4a90d9";
+          return (
+            <div key={key}>
+              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", textTransform: "uppercase", color, borderBottom: `2px solid ${color}`, paddingBottom: "5px", marginBottom: "10px", letterSpacing: "0.08em" }}>{key}</div>
+              {items.map((a, i) => {
+                const src = getSource(a.source_id);
+                return (
+                  <div key={i} style={{ marginBottom: "12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                      <SrcChip id={a.source_id} size={18} />
+                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#555" }}>{src.name}</span>
+                    </div>
+                    <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#c8c0b4", textDecoration: "none", lineHeight: "1.4", display: "block" }}
+                      onMouseEnter={e => e.target.style.color = "#4a90d9"}
+                      onMouseLeave={e => e.target.style.color = "#c8c0b4"}>
+                      {a.title}
+                    </a>
                   </div>
-                  <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#1a1714", textDecoration: "none", lineHeight: "1.4", display: "block" }}
-                    onMouseEnter={e => e.target.style.color = "#3d6b9e"}
-                    onMouseLeave={e => e.target.style.color = "#1a1714"}>
-                    {a.title}
-                  </a>
-                </div>
-              );
-            })}
-          </div>
-        ))}
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function StoryModal({ story, onClose, isPremium }) {
+function StoryModal({ story, onClose }) {
   if (!story) return null;
   const articles = story.articles || [];
-  const coverage = story.coverage_by_orientation || story.coverageByOrientation || {};
-  const blindspot = story.blindspot;
-  const score = getCoverageScore(coverage);
+  const cov = story.coverage_by_orientation || {};
+  const score = getCoverageScore(cov);
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(10,8,6,0.75)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "32px 20px", overflowY: "auto", backdropFilter: "blur(3px)" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "#fdfaf6", maxWidth: "720px", width: "100%", borderRadius: "4px", overflow: "hidden", boxShadow: "0 25px 80px rgba(0,0,0,0.3)" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "20px", overflowY: "auto", backdropFilter: "blur(4px)" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#141414", maxWidth: "700px", width: "100%", borderRadius: "16px", overflow: "hidden", border: "1px solid #2a2a2a" }}>
 
-        {/* Header */}
-        <div style={{ borderBottom: "3px solid #1a1714", padding: "28px 32px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
-            <span style={{ fontSize: "10px", fontFamily: "'IBM Plex Mono', monospace", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9b8f7a", background: "#f5f1eb", padding: "2px 8px" }}>{story.category || "Actualité"}</span>
-            <ScoreBadge score={score} />
+        <div style={{ padding: "24px 24px 0" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "14px", flexWrap: "wrap" }}>
+            {isBreaking(story) && <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", background: "#e74c3c", color: "white", padding: "2px 8px", borderRadius: "3px" }}>● Breaking</span>}
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#555", textTransform: "uppercase", letterSpacing: "0.1em" }}>{story.category}</span>
+            <ScorePill score={score} />
+            <button onClick={onClose} style={{ marginLeft: "auto", background: "#2a2a2a", border: "none", color: "#888", width: "28px", height: "28px", borderRadius: "50%", cursor: "pointer", fontSize: "14px" }}>✕</button>
           </div>
-          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "22px", fontWeight: "700", color: "#1a1714", lineHeight: "1.3", margin: "0 0 16px" }}>{story.title}</h2>
-          {story.summary && <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "15px", color: "#5a5248", lineHeight: "1.65", margin: "0 0 20px" }}>{story.summary}</p>}
-          <BiasBar coverage={coverage} />
+          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "22px", fontWeight: "700", color: "#f0ede8", lineHeight: "1.3", marginBottom: "12px" }}>{story.title}</h2>
+          {story.summary && <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "14px", color: "#888", lineHeight: "1.6", marginBottom: "16px" }}>{story.summary}</p>}
+          <BiasBar cov={cov} />
         </div>
 
-        {/* Blindspot */}
-        {blindspot && (
-          <div style={{ padding: "20px 32px", background: "#fef9ec", borderBottom: "1px solid #f0e4b0" }}>
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.1em", color: "#8a6d1a", textTransform: "uppercase", marginBottom: "6px" }}>⚠ Angle mort détecté</div>
-            <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "14px", color: "#6b5a1e", lineHeight: "1.55", margin: 0 }}>{blindspot.label} — certains camps ignorent cette histoire.</p>
+        {story.blindspot && (
+          <div style={{ margin: "16px 24px 0", padding: "12px 16px", background: "#1f1508", border: "1px solid #3d2f1e", borderRadius: "8px" }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#f39c12", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>⚠ Angle mort détecté</div>
+            <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#c8a96e", margin: 0 }}>{story.blindspot.label} — cette histoire est ignorée par certains camps.</p>
           </div>
         )}
 
-        {/* Side by side */}
         {articles.length > 0 && (
-          <div style={{ padding: "24px 32px", borderBottom: "1px solid #e8e4dc" }}>
-            <SideBySideView articles={articles} />
-          </div>
-        )}
-
-        {/* All articles */}
-        {articles.length > 0 && (
-          <div style={{ padding: "24px 32px", borderBottom: "1px solid #e8e4dc" }}>
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9b8f7a", marginBottom: "16px" }}>Tous les articles</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              {articles.map((article, i) => {
-                const src = getSourceMeta(article.source_id || article.sourceId);
+          <div style={{ padding: "0 24px 24px" }}>
+            <SideBySide articles={articles} />
+            <div style={{ marginTop: "24px" }}>
+              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#555", marginBottom: "14px" }}>Tous les articles ({articles.length})</div>
+              {articles.map((a, i) => {
+                const src = getSource(a.source_id);
                 return (
-                  <div key={i} style={{ display: "flex", gap: "12px", alignItems: "flex-start", paddingBottom: "14px", borderBottom: i < articles.length - 1 ? "1px solid #f0ede8" : "none" }}>
-                    <SourceLogo id={article.source_id || article.sourceId} size={32} />
+                  <div key={i} style={{ display: "flex", gap: "12px", alignItems: "flex-start", paddingBottom: "14px", borderBottom: i < articles.length - 1 ? "1px solid #1f1f1f" : "none", marginBottom: "14px" }}>
+                    <SrcChip id={a.source_id} size={32} />
                     <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px", flexWrap: "wrap" }}>
-                        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", color: "#1a1714", fontWeight: "600" }}>{src.name}</span>
-                        <OrientationDot orientation={src.orientation} />
+                        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#888", fontWeight: "600" }}>{src.name}</span>
+                        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: ORI_COLOR[src.orientation] || "#888" }}>● {src.orientation}</span>
                       </div>
-                      <a href={article.url} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#3d6b9e", textDecoration: "none", lineHeight: "1.4" }}>{article.title}</a>
+                      <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#c8c0b4", textDecoration: "none", lineHeight: "1.4" }}
+                        onMouseEnter={e => e.target.style.color = "#4a90d9"}
+                        onMouseLeave={e => e.target.style.color = "#c8c0b4"}>
+                        {a.title}
+                      </a>
                     </div>
                   </div>
                 );
@@ -281,120 +306,76 @@ function StoryModal({ story, onClose, isPremium }) {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
 
-        {/* Ownership section (premium) */}
-        {isPremium && (
-          <div style={{ padding: "24px 32px", borderBottom: "1px solid #e8e4dc", background: "#fdfaf6" }}>
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9b8f7a", marginBottom: "14px" }}>Qui possède ces sources ?</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {[...new Map((story.source_ids || story.sourceIds || []).map(id => { const s = getSourceMeta(id); return [s.owner, s]; })).values()].map((src, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <SourceLogo id={src.id} size={24} />
-                  <span style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#3a342c" }}>{src.name}</span>
-                  <span style={{ fontSize: "11px", fontFamily: "'IBM Plex Mono', monospace", color: "white", background: OWNER_TYPE_COLOR[src.ownerType] || "#999", padding: "2px 8px", borderRadius: "2px", marginLeft: "auto" }}>{src.owner}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div style={{ padding: "20px 32px", display: "flex", justifyContent: "flex-end" }}>
-          <button onClick={onClose} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", background: "#1a1714", color: "white", border: "none", padding: "10px 20px", cursor: "pointer", borderRadius: "2px" }}>Fermer</button>
+function PaywallModal({ readsLeft, onClose, onPremium }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", backdropFilter: "blur(6px)" }}>
+      <div style={{ background: "#141414", maxWidth: "420px", width: "100%", borderRadius: "20px", overflow: "hidden", border: "1px solid #2a2a2a" }}>
+        <div style={{ background: "#0f0f0f", padding: "32px 28px", textAlign: "center", borderBottom: "1px solid #1f1f1f" }}>
+          <Logo size={28} />
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#555", marginTop: "20px", marginBottom: "10px" }}>Limite atteinte</div>
+          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "22px", fontWeight: "700", color: "#f0ede8", lineHeight: "1.2" }}>Vous avez lu vos {FREE_LIMIT} histoires gratuites du jour</h2>
+          <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "14px", color: "#666", marginTop: "10px", lineHeight: "1.5" }}>Revenez demain, ou passez à Premium pour un accès illimité.</p>
+        </div>
+        <div style={{ padding: "24px 28px" }}>
+          {[
+            { label: "Mensuel", price: "4,99€", sub: "/mois", highlight: false },
+            { label: "Annuel", price: "49€", sub: "/an · économisez 18%", highlight: true },
+          ].map(({ label, price, sub, highlight }) => (
+            <button key={label} onClick={onPremium} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "16px 18px", marginBottom: "10px", border: highlight ? "1.5px solid #e74c3c" : "1px solid #2a2a2a", background: highlight ? "#1f0808" : "transparent", cursor: "pointer", borderRadius: "10px", fontFamily: "'Source Serif 4', serif" }}>
+              <span style={{ fontSize: "15px", fontWeight: "600", color: "#f0ede8" }}>{label}</span>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: "17px", fontWeight: "700", color: highlight ? "#e74c3c" : "#f0ede8" }}>{price}</div>
+                <div style={{ fontSize: "10px", color: "#555", fontFamily: "'IBM Plex Mono', monospace" }}>{sub}</div>
+              </div>
+            </button>
+          ))}
+          <button onClick={onClose} style={{ width: "100%", padding: "12px", background: "transparent", border: "none", cursor: "pointer", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.08em", color: "#444", marginTop: "4px" }}>
+            Revenir demain
+          </button>
+          <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#333", textAlign: "center", marginTop: "12px", letterSpacing: "0.06em" }}>AUCUNE PUBLICITÉ · AUCUN ACTIONNAIRE · 100% INDÉPENDANT</p>
         </div>
       </div>
     </div>
   );
 }
 
-function StoryCard({ story, onClick, index, isPremium, onPaywall }) {
-  const coverage = story.coverage_by_orientation || story.coverageByOrientation || {};
-  const sourceIds = story.source_ids || story.sourceIds || [];
-  const blindspot = story.blindspot;
-  const score = getCoverageScore(coverage);
-  const isLocked = !isPremium && index >= FREE_STORY_LIMIT;
-
-  const handleClick = () => {
-    if (isLocked) { onPaywall(); return; }
-    onClick(story);
-  };
-
-  return (
-    <article onClick={handleClick} style={{ borderBottom: "1px solid #e8e4dc", padding: "24px 0", cursor: "pointer", transition: "padding-left 0.2s", position: "relative", opacity: isLocked ? 0.6 : 1 }}
-      onMouseEnter={e => !isLocked && (e.currentTarget.style.paddingLeft = "8px")}
-      onMouseLeave={e => (e.currentTarget.style.paddingLeft = "0")}>
-
-      {isLocked && (
-        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1, background: "linear-gradient(to bottom, transparent, #f5f1eb)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#1a1714", color: "#fdfaf6", padding: "8px 16px", borderRadius: "20px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.08em" }}>
-            🔒 Premium
-          </div>
-        </div>
-      )}
-
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
-        <span style={{ fontSize: "10px", fontFamily: "'IBM Plex Mono', monospace", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9b8f7a", background: "#f5f1eb", padding: "2px 8px", borderRadius: "2px" }}>{story.category || "Actualité"}</span>
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "10px" }}>
-          <ScoreBadge score={score} />
-          <span style={{ fontSize: "10px", color: "#b0a898", fontFamily: "'IBM Plex Mono', monospace" }}>{story.coverage_count || sourceIds.length} sources</span>
-        </div>
-      </div>
-
-      {/* Image */}
-      {story.articles?.[0]?.image_url && (
-        <div style={{ marginBottom: "12px", borderRadius: "3px", overflow: "hidden", height: "160px" }}>
-          <img src={story.articles[0].image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => e.target.parentElement.style.display = "none"} />
-        </div>
-      )}
-
-      <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: "19px", fontWeight: "700", color: "#1a1714", lineHeight: "1.35", margin: "0 0 10px" }}>{story.title}</h2>
-      {story.summary && <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "14px", color: "#5a5248", lineHeight: "1.6", margin: "0 0 14px" }}>{story.summary.slice(0, 160)}{story.summary.length > 160 ? "…" : ""}</p>}
-
-      <BiasBar coverage={coverage} />
-
-      {blindspot && (
-        <div style={{ marginTop: "10px", padding: "8px 12px", background: "#fef9ec", border: "1px solid #f0e4b0", borderRadius: "3px", display: "flex", alignItems: "center", gap: "8px" }}>
-          <span>⚠️</span>
-          <span style={{ fontSize: "12px", fontFamily: "'IBM Plex Mono', monospace", color: "#8a6d1a", letterSpacing: "0.04em" }}>{blindspot.label}</span>
-        </div>
-      )}
-
-      <div style={{ display: "flex", gap: "5px", marginTop: "12px", flexWrap: "wrap" }}>
-        {sourceIds.slice(0, 7).map(id => <SourceLogo key={id} id={id} />)}
-        {sourceIds.length > 7 && <div style={{ width: "28px", height: "28px", borderRadius: "3px", background: "#e8e4dc", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", color: "#888" }}>+{sourceIds.length - 7}</div>}
-      </div>
-    </article>
-  );
-}
-
-export default function MédiaVue() {
-  const [activeTab, setActiveTab] = useState("feed");
+function FeedTab({ isPremium, onPremium }) {
   const [stories, setStories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedStory, setSelectedStory] = useState(null);
   const [category, setCategory] = useState("Tout");
   const [search, setSearch] = useState("");
+  const [selectedStory, setSelectedStory] = useState(null);
   const [showPaywall, setShowPaywall] = useState(false);
-  const [isPremium, setIsPremium] = useState(false);
-  const searchRef = useRef(null);
+  const [readsToday, setReadsToday] = useState(getReadsToday);
 
   useEffect(() => {
-    if (activeTab !== "feed") return;
     setLoading(true);
     setError(null);
     const cat = category !== "Tout" ? `&category=${category}` : "";
     fetch(`${API_URL}/api/stories?limit=50${cat}`)
       .then(r => r.json())
-      .then(data => { setStories(data.stories || []); setLoading(false); })
-      .catch(() => { setError("Impossible de charger les articles. Réessayez."); setLoading(false); });
-  }, [activeTab, category]);
+      .then(d => { setStories(d.stories || []); setLoading(false); })
+      .catch(() => { setError("Impossible de charger. Réessayez."); setLoading(false); });
+  }, [category]);
 
-  const filteredStories = stories.filter(s =>
-    search.trim() === "" || s.title.toLowerCase().includes(search.toLowerCase()) || (s.summary || "").toLowerCase().includes(search.toLowerCase())
+  const filtered = stories.filter(s =>
+    !search.trim() || s.title.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleStoryClick = async (story) => {
+  const breaking = filtered.filter(isBreaking);
+  const regular = filtered.filter(s => !isBreaking(s));
+
+  const handleClick = async (story) => {
+    if (!isPremium && readsToday >= FREE_LIMIT) { setShowPaywall(true); return; }
     setSelectedStory(story);
+    const newCount = incrementReads();
+    setReadsToday(newCount);
     if (!story.articles && story.id) {
       try {
         const res = await fetch(`${API_URL}/api/stories/${story.id}`);
@@ -404,12 +385,209 @@ export default function MédiaVue() {
     }
   };
 
-  const blindspotStory = stories.find(s => s.blindspot);
+  const readsLeft = Math.max(0, FREE_LIMIT - readsToday);
 
-  const tabs = [
-    { id: "feed", label: "À la une" },
-    { id: "sources", label: "Sources" },
-    { id: "ownership", label: "Propriétaires" },
+  return (
+    <div style={{ paddingBottom: "80px" }}>
+      {/* Search */}
+      <div style={{ position: "relative", marginBottom: "14px" }}>
+        <span style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#444", fontSize: "14px" }}>🔍</span>
+        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher…" style={{ width: "100%", padding: "11px 14px 11px 40px", border: "1px solid #2a2a2a", background: "#1a1a1a", fontFamily: "'Source Serif 4', serif", fontSize: "14px", color: "#f0ede8", borderRadius: "10px", outline: "none" }} />
+        {search && <button onClick={() => setSearch("")} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#555", fontSize: "18px" }}>×</button>}
+      </div>
+
+      {/* Categories */}
+      <div style={{ display: "flex", gap: "6px", overflowX: "auto", marginBottom: "16px", paddingBottom: "4px" }}>
+        {CATEGORIES.map(cat => (
+          <button key={cat} onClick={() => setCategory(cat)} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", letterSpacing: "0.06em", padding: "6px 14px", border: "1px solid", borderColor: category === cat ? "#e74c3c" : "#2a2a2a", background: category === cat ? "#1f0808" : "transparent", color: category === cat ? "#e74c3c" : "#555", cursor: "pointer", borderRadius: "20px", whiteSpace: "nowrap", transition: "all 0.15s" }}>
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      {/* Free reads counter */}
+      {!isPremium && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "#1a1a1a", borderRadius: "8px", marginBottom: "16px", border: "1px solid #2a2a2a" }}>
+          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#555", letterSpacing: "0.06em" }}>
+            {readsLeft > 0 ? `${readsLeft} lecture${readsLeft > 1 ? "s" : ""} gratuite${readsLeft > 1 ? "s" : ""} aujourd'hui` : "Limite atteinte aujourd'hui"}
+          </span>
+          <button onClick={onPremium} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.08em", textTransform: "uppercase", background: "#e74c3c", color: "white", border: "none", padding: "4px 10px", borderRadius: "4px", cursor: "pointer" }}>Premium</button>
+        </div>
+      )}
+
+      {loading && <div style={{ width: "24px", height: "24px", border: "2px solid #2a2a2a", borderTopColor: "#e74c3c", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "60px auto" }} />}
+      {error && <div style={{ padding: "16px", background: "#1f0808", border: "1px solid #3d1010", borderRadius: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "12px", color: "#e74c3c" }}>{error}</div>}
+
+      {/* Breaking news */}
+      {!loading && breaking.length > 0 && (
+        <div style={{ marginBottom: "20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#e74c3c", display: "inline-block" }} />
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#e74c3c" }}>Breaking News</span>
+          </div>
+          {breaking.map((s, i) => <StoryCard key={s.id || i} story={s} onClick={handleClick} locked={!isPremium && readsToday >= FREE_LIMIT} onLock={() => setShowPaywall(true)} />)}
+        </div>
+      )}
+
+      {/* Regular stories */}
+      {!loading && !error && (
+        <div>
+          {breaking.length > 0 && regular.length > 0 && (
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#444", marginBottom: "12px" }}>Toutes les histoires · {filtered.length}</div>
+          )}
+          {regular.map((s, i) => (
+            <div key={s.id || i} style={{ animation: `fadeUp 0.3s ease ${Math.min(i, 8) * 0.04}s both` }}>
+              <StoryCard story={s} onClick={handleClick} locked={!isPremium && readsToday + i >= FREE_LIMIT} onLock={() => setShowPaywall(true)} />
+            </div>
+          ))}
+          {filtered.length === 0 && search && (
+            <div style={{ textAlign: "center", padding: "60px 20px", fontFamily: "'Source Serif 4', serif", color: "#444" }}>Aucun résultat pour «{search}»</div>
+          )}
+        </div>
+      )}
+
+      {selectedStory && <StoryModal story={selectedStory} onClose={() => setSelectedStory(null)} />}
+      {showPaywall && <PaywallModal readsLeft={readsLeft} onClose={() => setShowPaywall(false)} onPremium={() => { onPremium(); setShowPaywall(false); }} />}
+    </div>
+  );
+}
+
+function SourcesTab() {
+  const [filter, setFilter] = useState("all");
+  const filtered = filter === "all" ? SOURCES : SOURCES.filter(s => {
+    if (filter === "gauche") return s.orientationScore <= 1;
+    if (filter === "centre") return s.orientationScore > 1 && s.orientationScore < 4;
+    if (filter === "droite") return s.orientationScore >= 4;
+    return true;
+  });
+
+  return (
+    <div style={{ paddingBottom: "80px" }}>
+      <div style={{ display: "flex", gap: "6px", marginBottom: "16px" }}>
+        {["all", "gauche", "centre", "droite"].map(f => (
+          <button key={f} onClick={() => setFilter(f)} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", letterSpacing: "0.06em", padding: "6px 14px", border: "1px solid", borderColor: filter === f ? "#e74c3c" : "#2a2a2a", background: filter === f ? "#1f0808" : "transparent", color: filter === f ? "#e74c3c" : "#555", cursor: "pointer", borderRadius: "20px" }}>
+            {f === "all" ? "Tous" : f}
+          </button>
+        ))}
+      </div>
+      {filtered.map(src => (
+        <div key={src.id} style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: "12px", padding: "16px", marginBottom: "10px", display: "flex", gap: "14px" }}>
+          <SrcChip id={src.id} size={44} />
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px", flexWrap: "wrap" }}>
+              <span style={{ fontFamily: "'Playfair Display', serif", fontSize: "15px", fontWeight: "700", color: "#f0ede8" }}>{src.name}</span>
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: ORI_COLOR[src.orientation] || "#888" }}>● {src.orientation}</span>
+            </div>
+            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8px", color: "#444", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "2px" }}>Fiabilité</div>
+                <div style={{ fontSize: "12px", color: src.factuality === "Élevée" ? "#27ae60" : src.factuality === "Mixte" ? "#f39c12" : "#e74c3c" }}>{src.factuality}</div>
+              </div>
+              <div>
+                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8px", color: "#444", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "2px" }}>Propriétaire</div>
+                <div style={{ fontSize: "12px", color: "#888" }}>{src.owner}</div>
+              </div>
+              <div>
+                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8px", color: "#444", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "2px" }}>Type</div>
+                <span style={{ fontSize: "9px", fontFamily: "'IBM Plex Mono', monospace", color: "white", background: OWNER_TYPE_COLOR[src.ownerType] || "#333", padding: "2px 7px", borderRadius: "3px" }}>{src.ownerType}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OwnershipTab() {
+  const groups = Object.values(SOURCES.reduce((acc, src) => {
+    if (!acc[src.owner]) acc[src.owner] = { owner: src.owner, type: src.ownerType, sources: [] };
+    acc[src.owner].sources.push(src);
+    return acc;
+  }, {}));
+
+  return (
+    <div style={{ paddingBottom: "80px" }}>
+      <div style={{ padding: "14px 16px", background: "#1f1508", border: "1px solid #3d2f1e", borderRadius: "10px", marginBottom: "16px" }}>
+        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#f39c12", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "6px" }}>Pourquoi c'est important</div>
+        <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#c8a96e", lineHeight: "1.55", margin: 0 }}>En France, 4 milliardaires contrôlent l'essentiel des médias d'information. Connaître le propriétaire, c'est comprendre les biais.</p>
+      </div>
+      {groups.map((g, i) => (
+        <div key={i} style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: "12px", overflow: "hidden", marginBottom: "10px" }}>
+          <div style={{ padding: "14px 16px", borderBottom: "1px solid #1f1f1f", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "15px", fontWeight: "700", color: "#f0ede8", marginBottom: "4px" }}>{g.owner}</div>
+              <span style={{ fontSize: "9px", fontFamily: "'IBM Plex Mono', monospace", color: "white", background: OWNER_TYPE_COLOR[g.type] || "#333", padding: "2px 8px", borderRadius: "3px" }}>{g.type}</span>
+            </div>
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#444" }}>{g.sources.length} titre{g.sources.length > 1 ? "s" : ""}</span>
+          </div>
+          <div style={{ padding: "12px 16px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {g.sources.map(src => (
+              <div key={src.id} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 10px", background: "#0f0f0f", borderRadius: "6px", border: "1px solid #1f1f1f" }}>
+                <SrcChip id={src.id} size={20} />
+                <div>
+                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#888" }}>{src.name}</div>
+                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: ORI_COLOR[src.orientation] || "#555" }}>● {src.orientation}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ProfileTab({ isPremium, onPremium }) {
+  return (
+    <div style={{ paddingBottom: "80px" }}>
+      <div style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: "16px", padding: "24px", marginBottom: "16px", textAlign: "center" }}>
+        <div style={{ width: "64px", height: "64px", borderRadius: "50%", background: "#2a2a2a", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontSize: "24px" }}>👤</div>
+        <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "18px", fontWeight: "700", color: "#f0ede8", marginBottom: "4px" }}>Visiteur</div>
+        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#555", letterSpacing: "0.08em" }}>{isPremium ? "● PREMIUM" : "Compte gratuit"}</div>
+      </div>
+
+      {!isPremium && (
+        <div style={{ background: "#1f0808", border: "1px solid #3d1010", borderRadius: "12px", padding: "20px", marginBottom: "16px" }}>
+          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "17px", fontWeight: "700", color: "#f0ede8", marginBottom: "8px" }}>Passez à Premium</div>
+          <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#888", lineHeight: "1.5", marginBottom: "16px" }}>Lectures illimitées, données de propriété, rapport d'angle mort personnel.</p>
+          <button onClick={onPremium} style={{ width: "100%", padding: "14px", background: "#e74c3c", color: "white", border: "none", borderRadius: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "12px", letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer" }}>
+            Essayer Premium
+          </button>
+        </div>
+      )}
+
+      <div style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: "12px", overflow: "hidden" }}>
+        {[
+          { icon: "📊", label: "Lectures aujourd'hui", value: `${getReadsToday()}/${isPremium ? "∞" : FREE_LIMIT}` },
+          { icon: "🎯", label: "Mon angle mort", value: isPremium ? "Voir le rapport" : "Premium" },
+          { icon: "🔔", label: "Alertes", value: "Bientôt" },
+          { icon: "📧", label: "Digest hebdo", value: "Bientôt" },
+        ].map(({ icon, label, value }, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", borderBottom: i < 3 ? "1px solid #1f1f1f" : "none" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <span style={{ fontSize: "16px" }}>{icon}</span>
+              <span style={{ fontFamily: "'Source Serif 4', serif", fontSize: "14px", color: "#888" }}>{label}</span>
+            </div>
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", color: value === "Premium" ? "#e74c3c" : "#555" }}>{value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Main App ──────────────────────────────────────────────────────────────────
+
+export default function MédiaVue() {
+  const [tab, setTab] = useState("news");
+  const [isPremium, setIsPremium] = useState(false);
+
+  const navItems = [
+    { id: "news", icon: "📰", label: "Actualités" },
+    { id: "blindspot", icon: "🎯", label: "Angles morts" },
+    { id: "sources", icon: "📋", label: "Sources" },
+    { id: "profile", icon: "👤", label: "Profil" },
   ];
 
   return (
@@ -417,173 +595,58 @@ export default function MédiaVue() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;600&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        body { background: #0f0f0f; color: #f0ede8; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .story-in { animation: fadeUp 0.4s ease both; }
-        .spinner { width: 24px; height: 24px; border: 2px solid #e8e4dc; border-top-color: #1a1714; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 60px auto; }
-        input:focus { outline: none; }
-        ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #f5f1eb; } ::-webkit-scrollbar-thumb { background: #d0c9bf; border-radius: 3px; }
-        @media (max-width: 600px) { .story-grid { padding: 0 16px !important; } .modal-inner { padding: 20px !important; } }
+        input::placeholder { color: #444; }
+        ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: #0f0f0f; } ::-webkit-scrollbar-thumb { background: #2a2a2a; }
+        ::-webkit-scrollbar-horizontal { height: 0; }
       `}</style>
 
-      <div style={{ minHeight: "100vh", background: "#f5f1eb", fontFamily: "'Source Serif 4', Georgia, serif" }}>
+      <div style={{ minHeight: "100vh", background: "#0f0f0f", maxWidth: "480px", margin: "0 auto", position: "relative" }}>
 
         {/* Header */}
-        <header style={{ borderBottom: "3px solid #1a1714", background: "#fdfaf6", position: "sticky", top: 0, zIndex: 100 }}>
-          <div style={{ maxWidth: "800px", margin: "0 auto", padding: "0 20px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0 10px" }}>
-              <MédiaVueLogo />
-              <button onClick={() => isPremium ? setIsPremium(false) : setShowPaywall(true)} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", background: isPremium ? "#27ae60" : "#1a1714", color: "white", border: "none", padding: "8px 16px", cursor: "pointer", borderRadius: "2px" }}>
-                {isPremium ? "✓ Premium" : "Devenir Premium"}
-              </button>
+        <header style={{ background: "#0f0f0f", borderBottom: "1px solid #1a1a1a", padding: "16px 20px 12px", position: "sticky", top: 0, zIndex: 100 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <Logo size={20} />
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              {isPremium && <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.1em", color: "#27ae60", border: "1px solid #27ae60", padding: "2px 8px", borderRadius: "10px" }}>PREMIUM</span>}
+              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#333", letterSpacing: "0.06em" }}>
+                {new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}
+              </div>
             </div>
-            <nav style={{ display: "flex" }}>
-              {tabs.map(tab => (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", padding: "10px 18px", background: "transparent", border: "none", borderBottom: activeTab === tab.id ? "2px solid #1a1714" : "2px solid transparent", color: activeTab === tab.id ? "#1a1714" : "#9b8f7a", cursor: "pointer", marginBottom: "-1px" }}>
-                  {tab.label}
-                </button>
-              ))}
-            </nav>
           </div>
         </header>
 
-        <main style={{ maxWidth: "800px", margin: "0 auto", padding: "28px 20px" }} className="story-grid">
-
-          {activeTab === "feed" && (
-            <div>
-              {/* Search */}
-              <div style={{ position: "relative", marginBottom: "20px" }}>
-                <span style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#9b8f7a", fontSize: "14px" }}>🔍</span>
-                <input ref={searchRef} type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher une histoire…" style={{ width: "100%", padding: "12px 14px 12px 40px", border: "1px solid #d0c9bf", background: "#fdfaf6", fontFamily: "'Source Serif 4', serif", fontSize: "15px", color: "#1a1714", borderRadius: "3px" }} />
-                {search && <button onClick={() => setSearch("")} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#9b8f7a", fontSize: "16px" }}>×</button>}
-              </div>
-
-              {/* Category filters */}
-              <div style={{ display: "flex", gap: "6px", marginBottom: "24px", flexWrap: "wrap" }}>
-                {CATEGORIES.map(cat => (
-                  <button key={cat} onClick={() => setCategory(cat)} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", padding: "6px 12px", border: "1px solid", borderColor: category === cat ? "#1a1714" : "#d0c9bf", background: category === cat ? "#1a1714" : "transparent", color: category === cat ? "white" : "#666", cursor: "pointer", borderRadius: "20px", transition: "all 0.15s" }}>
-                    {cat}
-                  </button>
-                ))}
-              </div>
-
-              {/* Feed header */}
-              <div style={{ display: "flex", alignItems: "baseline", gap: "12px", marginBottom: "20px", paddingBottom: "16px", borderBottom: "1px solid #e8e4dc" }}>
-                <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "22px", fontWeight: "700", color: "#1a1714" }}>À la une</h2>
-                {!loading && <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#9b8f7a", letterSpacing: "0.08em" }}>{filteredStories.length} HISTOIRES · EN DIRECT</span>}
-                {!isPremium && <span style={{ marginLeft: "auto", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#9b8f7a" }}>{Math.max(0, FREE_STORY_LIMIT - Math.min(filteredStories.length, FREE_STORY_LIMIT))} gratuites restantes</span>}
-              </div>
-
-              {loading && <div className="spinner" />}
-              {error && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "4px", padding: "16px 20px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "13px", color: "#c0392b" }}>{error}</div>}
-
-              {/* Blindspot alert */}
-              {!loading && !error && blindspotStory && (
-                <div style={{ background: "white", border: "1px solid #e8e4dc", borderLeft: "3px solid #e74c3c", padding: "16px 20px", marginBottom: "20px" }}>
-                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#c0392b", marginBottom: "6px" }}>⚠ Angle mort du jour</div>
-                  <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "14px", color: "#3a342c", lineHeight: "1.55" }}>
-                    <strong>«{blindspotStory.title.slice(0, 70)}»</strong> — {blindspotStory.blindspot?.label}
-                  </p>
-                </div>
-              )}
-
-              {/* Stories */}
-              {!loading && !error && filteredStories.map((story, i) => (
-                <div key={story.id || i} className="story-in" style={{ animationDelay: `${Math.min(i, 10) * 0.04}s` }}>
-                  <StoryCard story={story} onClick={handleStoryClick} index={i} isPremium={isPremium} onPaywall={() => setShowPaywall(true)} />
-                </div>
-              ))}
-
-              {!loading && !error && filteredStories.length === 0 && (
-                <div style={{ textAlign: "center", padding: "60px 20px", fontFamily: "'Source Serif 4', serif", color: "#9b8f7a" }}>Aucune histoire trouvée pour «{search}»</div>
-              )}
-            </div>
-          )}
-
-          {activeTab === "sources" && (
-            <div>
-              <div style={{ marginBottom: "24px", paddingBottom: "16px", borderBottom: "1px solid #e8e4dc" }}>
-                <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "22px", fontWeight: "700", color: "#1a1714", marginBottom: "6px" }}>Sources référencées</h2>
-                <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", color: "#9b8f7a", letterSpacing: "0.06em" }}>{SOURCES.length} MÉDIAS · ÉVALUÉS PAR NOTRE MÉTHODOLOGIE</p>
-              </div>
-              <div style={{ display: "grid", gap: "12px" }}>
-                {SOURCES.map(src => (
-                  <div key={src.id} style={{ background: "white", border: "1px solid #e8e4dc", borderRadius: "4px", padding: "18px 20px", display: "flex", gap: "14px", alignItems: "flex-start" }}>
-                    <SourceLogo id={src.id} size={44} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px", flexWrap: "wrap" }}>
-                        <span style={{ fontFamily: "'Playfair Display', serif", fontSize: "16px", fontWeight: "700", color: "#1a1714" }}>{src.name}</span>
-                        <OrientationDot orientation={src.orientation} />
-                      </div>
-                      <div style={{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
-                        <div>
-                          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#9b8f7a", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "2px" }}>Fiabilité</div>
-                          <div style={{ fontSize: "13px", color: src.factuality === "Élevée" ? "#27ae60" : src.factuality === "Mixte" ? "#f39c12" : "#e74c3c" }}>{src.factuality}</div>
-                        </div>
-                        <div>
-                          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#9b8f7a", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "2px" }}>Propriétaire</div>
-                          <div style={{ fontSize: "13px", color: "#3a342c" }}>{src.owner}</div>
-                        </div>
-                        <div>
-                          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#9b8f7a", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "2px" }}>Type</div>
-                          <span style={{ fontSize: "11px", fontFamily: "'IBM Plex Mono', monospace", color: "white", background: OWNER_TYPE_COLOR[src.ownerType] || "#999", padding: "2px 8px", borderRadius: "2px" }}>{src.ownerType}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+        {/* Content */}
+        <div style={{ padding: "16px 16px 0" }}>
+          {tab === "news" && <FeedTab isPremium={isPremium} onPremium={() => setIsPremium(true)} />}
+          {tab === "blindspot" && (
+            <div style={{ paddingBottom: "80px" }}>
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "22px", fontWeight: "700", color: "#f0ede8", marginBottom: "6px" }}>Angles morts</div>
+              <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "14px", color: "#555", marginBottom: "20px" }}>Histoires ignorées par un camp politique</p>
+              <div style={{ padding: "40px", textAlign: "center", background: "#1a1a1a", borderRadius: "12px", border: "1px solid #2a2a2a" }}>
+                <div style={{ fontSize: "32px", marginBottom: "12px" }}>🎯</div>
+                <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "17px", color: "#888" }}>Bientôt disponible</div>
+                <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#444", marginTop: "8px" }}>Les angles morts apparaîtront ici avec Plus de sources indexées</p>
               </div>
             </div>
           )}
+          {tab === "sources" && <SourcesTab />}
+          {tab === "profile" && <ProfileTab isPremium={isPremium} onPremium={() => setIsPremium(true)} />}
+        </div>
 
-          {activeTab === "ownership" && (
-            <div>
-              <div style={{ marginBottom: "24px", paddingBottom: "16px", borderBottom: "1px solid #e8e4dc" }}>
-                <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "22px", fontWeight: "700", color: "#1a1714", marginBottom: "6px" }}>Qui possède quoi ?</h2>
-                <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", color: "#9b8f7a", letterSpacing: "0.06em" }}>TRANSPARENCE SUR LA PROPRIÉTÉ DES MÉDIAS FRANÇAIS</p>
-              </div>
-              <div style={{ background: "#fef9ec", border: "1px solid #f0e4b0", borderRadius: "4px", padding: "16px 20px", marginBottom: "20px" }}>
-                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: "#8a6d1a", marginBottom: "6px" }}>Pourquoi c'est important</div>
-                <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#5a4a1e", lineHeight: "1.6", margin: 0 }}>En France, une poignée de milliardaires contrôlent l'essentiel des médias d'information. Connaître le propriétaire d'un titre, c'est mieux comprendre ses lignes éditoriales.</p>
-              </div>
-              {Object.values(SOURCES.reduce((acc, src) => {
-                if (!acc[src.owner]) acc[src.owner] = { owner: src.owner, type: src.ownerType, sources: [] };
-                acc[src.owner].sources.push(src);
-                return acc;
-              }, {})).map((group, i) => (
-                <div key={i} style={{ background: "white", border: "1px solid #e8e4dc", borderRadius: "4px", overflow: "hidden", marginBottom: "12px" }}>
-                  <div style={{ padding: "16px 20px", borderBottom: "1px solid #e8e4dc", background: "#fdfaf6", display: "flex", alignItems: "center", gap: "12px" }}>
-                    <div>
-                      <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "16px", fontWeight: "700", color: "#1a1714", marginBottom: "4px" }}>{group.owner}</div>
-                      <span style={{ fontSize: "10px", fontFamily: "'IBM Plex Mono', monospace", color: "white", background: OWNER_TYPE_COLOR[group.type] || "#999", padding: "2px 8px", borderRadius: "2px", textTransform: "uppercase" }}>{group.type}</span>
-                    </div>
-                    <div style={{ marginLeft: "auto", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", color: "#9b8f7a" }}>{group.sources.length} titre{group.sources.length > 1 ? "s" : ""}</div>
-                  </div>
-                  <div style={{ padding: "12px 20px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    {group.sources.map(src => (
-                      <div key={src.id} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 10px", border: "1px solid #e8e4dc", borderRadius: "3px" }}>
-                        <SourceLogo id={src.id} size={24} />
-                        <div>
-                          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", color: "#1a1714", fontWeight: "600" }}>{src.name}</div>
-                          <OrientationDot orientation={src.orientation} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </main>
-
-        <footer style={{ borderTop: "1px solid #e8e4dc", padding: "24px 20px", textAlign: "center", background: "#fdfaf6" }}>
-          <div style={{ marginBottom: "6px" }}><MédiaVueLogo /></div>
-          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#9b8f7a", letterSpacing: "0.08em", textTransform: "uppercase" }}>Aucune publicité · Aucun actionnaire · 100% indépendant</div>
-        </footer>
+        {/* Bottom nav */}
+        <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "480px", background: "#0f0f0f", borderTop: "1px solid #1a1a1a", display: "flex", zIndex: 200, paddingBottom: "env(safe-area-inset-bottom, 8px)" }}>
+          {navItems.map(({ id, icon, label }) => (
+            <button key={id} onClick={() => setTab(id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", padding: "10px 0", background: "transparent", border: "none", cursor: "pointer", transition: "opacity 0.15s" }}>
+              <span style={{ fontSize: "18px", filter: tab === id ? "none" : "grayscale(1)", opacity: tab === id ? 1 : 0.4 }}>{icon}</span>
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.06em", color: tab === id ? "#e74c3c" : "#444", textTransform: "uppercase" }}>{label}</span>
+              {tab === id && <div style={{ width: "16px", height: "2px", background: "#e74c3c", borderRadius: "1px" }} />}
+            </button>
+          ))}
+        </nav>
       </div>
-
-      {selectedStory && <StoryModal story={selectedStory} onClose={() => setSelectedStory(null)} isPremium={isPremium} />}
-      {showPaywall && <PaywallModal onClose={() => setShowPaywall(false)} onSubscribe={() => { setIsPremium(true); setShowPaywall(false); }} />}
     </>
   );
 }
