@@ -4,6 +4,7 @@ const API_URL = "https://mediavue-backend-production.up.railway.app";
 const FREE_LIMIT = 5;
 const STORAGE_KEY = "mv_reads";
 const RESET_KEY = "mv_reset";
+const PROFILE_KEY = "mv_profile";
 
 const SOURCES = [
   { id: "lemonde", name: "Le Monde", orientation: "centre-gauche", orientationScore: 2, factuality: "Élevée", owner: "Xavier Niel / Matthieu Pigasse", ownerType: "milliardaires indépendants", logo: "LM", color: "#2471a3" },
@@ -49,7 +50,7 @@ function getSource(id) {
 
 function isBreaking(story) {
   if (!story.published_at) return false;
-  return (Date.now() - new Date(story.published_at)) / 3600000 < 2 && (story.coverageCount || story.coverage_count || 0) >= 3;
+  return (Date.now() - new Date(story.published_at)) / 3600000 < 6 && (story.coverageCount || story.coverage_count || 0) >= 3;
 }
 
 function getScore(cov) {
@@ -77,6 +78,28 @@ function incrementReads() {
     localStorage.setItem(STORAGE_KEY, String(n));
     return n;
   } catch { return 0; }
+}
+
+function getProfile() {
+  try {
+    return JSON.parse(localStorage.getItem(PROFILE_KEY) || '{"gauche":0,"centre":0,"droite":0,"total":0,"sources":{}}');
+  } catch { return { gauche: 0, centre: 0, droite: 0, total: 0, sources: {} }; }
+}
+
+function updateProfile(sourceIds) {
+  try {
+    const profile = getProfile();
+    profile.total += 1;
+    (sourceIds || []).forEach(id => {
+      const src = getSource(id);
+      const score = src.orientationScore;
+      if (score <= 1) profile.gauche++;
+      else if (score <= 3) profile.centre++;
+      else profile.droite++;
+      profile.sources[id] = (profile.sources[id] || 0) + 1;
+    });
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  } catch {}
 }
 
 function Logo() {
@@ -134,65 +157,112 @@ function ScorePill({ score }) {
   );
 }
 
-function StoryCard({ story, onClick, locked, onLock }) {
+function PaywallModal({ onClose, onPremium }) {
+  const [showStudent, setShowStudent] = useState(false);
+  const [studentEmail, setStudentEmail] = useState("");
+  const [studentSubmitted, setStudentSubmitted] = useState(false);
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", backdropFilter: "blur(8px)" }}>
+      <div style={{ background: "#141414", maxWidth: "400px", width: "100%", borderRadius: "20px", border: "1px solid #1f1f1f", overflow: "hidden" }}>
+        <div style={{ padding: "28px 26px 22px", textAlign: "center", borderBottom: "1px solid #191919" }}>
+          <Logo />
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.15em", color: "#333", marginTop: "18px", marginBottom: "8px", textTransform: "uppercase" }}>Limite quotidienne atteinte</div>
+          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "18px", fontWeight: "700", color: "#f0ede8", lineHeight: "1.3" }}>Vous avez lu vos {FREE_LIMIT} histoires gratuites aujourd'hui</h2>
+        </div>
+        <div style={{ padding: "20px 26px" }}>
+          {!showStudent ? (
+            <>
+              {[{ label: "Mensuel", price: "4,99€", sub: "par mois", hi: false }, { label: "Annuel", price: "49€", sub: "par an · économisez 18%", hi: true }].map(({ label, price, sub, hi }) => (
+                <button key={label} onClick={onPremium} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "14px 16px", marginBottom: "8px", border: `1.5px solid ${hi ? "#e74c3c" : "#222"}`, background: hi ? "#1c0808" : "transparent", cursor: "pointer", borderRadius: "10px" }}>
+                  <span style={{ fontFamily: "'Playfair Display', serif", fontSize: "15px", fontWeight: "700", color: "#f0ede8" }}>{label}</span>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "17px", fontWeight: "700", color: hi ? "#e74c3c" : "#f0ede8" }}>{price}</div>
+                    <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#444" }}>{sub}</div>
+                  </div>
+                </button>
+              ))}
+              <button onClick={() => setShowStudent(true)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "12px 16px", marginBottom: "12px", border: "1px dashed #1e8449", background: "#0a1a0a", cursor: "pointer", borderRadius: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontSize: "14px" }}>🎓</span>
+                  <div style={{ textAlign: "left" }}>
+                    <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "14px", fontWeight: "700", color: "#f0ede8" }}>Tarif étudiant</div>
+                    <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#1e8449" }}>Vérification par email universitaire</div>
+                  </div>
+                </div>
+                <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "17px", fontWeight: "700", color: "#1e8449" }}>1,99€<span style={{ fontSize: "11px", color: "#555", fontWeight: "400" }}>/mois</span></div>
+              </button>
+              <button onClick={onClose} style={{ width: "100%", padding: "10px", background: "transparent", border: "none", cursor: "pointer", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#2a2a2a" }}>Revenir demain</button>
+              <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#222", textAlign: "center", marginTop: "10px", letterSpacing: "0.06em" }}>AUCUNE PUBLICITÉ · 100% INDÉPENDANT</p>
+            </>
+          ) : studentSubmitted ? (
+            <div style={{ textAlign: "center", padding: "20px 0" }}>
+              <div style={{ fontSize: "28px", marginBottom: "12px" }}>📧</div>
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "17px", fontWeight: "700", color: "#f0ede8", marginBottom: "8px" }}>Vérification envoyée</div>
+              <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#555", lineHeight: "1.5", marginBottom: "16px" }}>Vérifiez votre boîte mail universitaire. Votre accès sera activé sous 24h.</p>
+              <button onClick={onPremium} style={{ width: "100%", padding: "12px", background: "#1e8449", color: "white", border: "none", borderRadius: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer" }}>Accéder maintenant</button>
+            </div>
+          ) : (
+            <div>
+              <button onClick={() => setShowStudent(false)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", marginBottom: "14px", padding: 0 }}>← Retour</button>
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "16px", fontWeight: "700", color: "#f0ede8", marginBottom: "6px" }}>Tarif étudiant — 1,99€/mois</div>
+              <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#555", lineHeight: "1.5", marginBottom: "16px" }}>Entrez votre adresse email universitaire pour vérifier votre statut étudiant.</p>
+              <input type="email" value={studentEmail} onChange={e => setStudentEmail(e.target.value)} placeholder="prenom.nom@univ-paris.fr"
+                style={{ width: "100%", padding: "12px 14px", border: "1px solid #222", background: "#0f0f0f", fontFamily: "'Source Serif 4', serif", fontSize: "14px", color: "#f0ede8", borderRadius: "8px", outline: "none", marginBottom: "10px" }} />
+              <button onClick={() => studentEmail.includes("@") && setStudentSubmitted(true)} style={{ width: "100%", padding: "12px", background: "#1e8449", color: "white", border: "none", borderRadius: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer", opacity: studentEmail.includes("@") ? 1 : 0.4 }}>
+                Vérifier mon statut étudiant
+              </button>
+              <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#222", textAlign: "center", marginTop: "10px" }}>Domaines acceptés : .edu, .ac.fr, univ-*.fr, sciences-po.fr, etc.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StoryCard({ story, onClick, locked, onLock, compact = false }) {
   const cov = story.coverageByOrientation || story.coverage_by_orientation || {};
   const srcIds = story.sourceIds || story.source_ids || [];
   const img = story.articles?.[0]?.image_url;
   const breaking = isBreaking(story);
-
+  const blindspot = story.blindspot;
   return (
     <div onClick={locked ? onLock : () => onClick(story)}
       style={{ background: "#161616", borderRadius: "14px", overflow: "hidden", cursor: "pointer", marginBottom: "10px", border: "1px solid #222", transition: "border-color 0.2s, transform 0.15s", position: "relative" }}
       onMouseEnter={e => { e.currentTarget.style.borderColor = "#333"; e.currentTarget.style.transform = "translateY(-1px)"; }}
       onMouseLeave={e => { e.currentTarget.style.borderColor = "#222"; e.currentTarget.style.transform = "translateY(0)"; }}>
-
       {locked && (
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, transparent 30%, #0f0f0f 75%)", zIndex: 2, display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: "18px", borderRadius: "14px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#e74c3c", color: "white", padding: "8px 18px", borderRadius: "20px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", letterSpacing: "0.1em" }}>🔒 Passer à Premium</div>
         </div>
       )}
-
-      {img && (
-        <div style={{ height: "145px", overflow: "hidden", position: "relative" }}>
+      {!compact && img && (
+        <div style={{ height: "140px", overflow: "hidden", position: "relative" }}>
           <img src={img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => e.target.parentElement.style.display = "none"} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, transparent 50%, #161616)" }} />
-          {breaking && (
-            <div style={{ position: "absolute", top: "10px", left: "10px", display: "flex", alignItems: "center", gap: "5px", background: "#e74c3c", color: "white", padding: "3px 10px", borderRadius: "4px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.1em" }}>
-              <span style={{ width: 5, height: 5, borderRadius: "50%", background: "white", display: "inline-block" }} />BREAKING
-            </div>
-          )}
+          {breaking && <div style={{ position: "absolute", top: "10px", left: "10px", display: "flex", alignItems: "center", gap: "5px", background: "#e74c3c", color: "white", padding: "3px 10px", borderRadius: "4px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.1em" }}><span style={{ width: 5, height: 5, borderRadius: "50%", background: "white", display: "inline-block" }} />BREAKING</div>}
         </div>
       )}
-
-      <div style={{ padding: "14px 15px" }}>
+      <div style={{ padding: compact ? "12px 14px" : "14px 15px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "8px", flexWrap: "wrap" }}>
-          {!img && breaking && <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", background: "#e74c3c", color: "white", padding: "2px 8px", borderRadius: "4px" }}>● BREAKING</span>}
+          {(compact || !img) && breaking && <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", background: "#e74c3c", color: "white", padding: "2px 8px", borderRadius: "4px" }}>● BREAKING</span>}
           <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#3a3a3a", letterSpacing: "0.1em", textTransform: "uppercase" }}>{story.category || "Actualité"}</span>
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "6px" }}>
             <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#2a2a2a" }}>{story.coverageCount || story.coverage_count || srcIds.length} sources</span>
             <ScorePill score={getScore(cov)} />
           </div>
         </div>
-
-        <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: "17px", fontWeight: "700", color: "#f0ede8", lineHeight: "1.35", margin: "0 0 8px" }}>{story.title}</h3>
-
-        {story.summary && (
-          <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#555", lineHeight: "1.55", margin: "0 0 12px" }}>
-            {story.summary.slice(0, 115)}{story.summary.length > 115 ? "…" : ""}
-          </p>
+        <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: compact ? "15px" : "17px", fontWeight: "700", color: "#f0ede8", lineHeight: "1.35", margin: "0 0 8px" }}>{story.title}</h3>
+        {!compact && story.summary && (
+          <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#555", lineHeight: "1.55", margin: "0 0 12px" }}>{story.summary.slice(0, 115)}{story.summary.length > 115 ? "…" : ""}</p>
         )}
-
         <BiasBar cov={cov} />
-
-        {story.blindspot && (
+        {blindspot && (
           <div style={{ marginTop: "10px", padding: "8px 11px", background: "#1a1200", border: "1px solid #2e2000", borderRadius: "7px", display: "flex", alignItems: "center", gap: "7px" }}>
             <span style={{ fontSize: "11px" }}>⚠️</span>
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#c8960c", letterSpacing: "0.05em" }}>
-              ANGLE MORT · {story.blindspot.sides?.join(" & ") || story.blindspot.label}
-            </span>
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#c8960c", letterSpacing: "0.05em" }}>ANGLE MORT · {blindspot.sides?.join(" & ") || blindspot.label}</span>
           </div>
         )}
-
         {srcIds.length > 0 && (
           <div style={{ display: "flex", gap: "4px", marginTop: "11px", flexWrap: "wrap" }}>
             {srcIds.slice(0, 8).map(id => <SrcChip key={id} id={id} size={24} />)}
@@ -208,7 +278,6 @@ function StoryModal({ story, onClose }) {
   if (!story) return null;
   const articles = story.articles || [];
   const cov = story.coverageByOrientation || story.coverage_by_orientation || {};
-
   const gauche = articles.filter(a => (getSource(a.sourceId || a.source_id)?.orientationScore ?? 3) <= 1);
   const centre = articles.filter(a => { const s = getSource(a.sourceId || a.source_id)?.orientationScore ?? 3; return s > 1 && s < 4; });
   const droite = articles.filter(a => (getSource(a.sourceId || a.source_id)?.orientationScore ?? 3) >= 4);
@@ -217,11 +286,9 @@ function StoryModal({ story, onClose }) {
     { key: "Centre", color: "#888", bg: "#111", items: centre },
     { key: "Droite", color: "#3d7ebf", bg: "#080f1c", items: droite },
   ].filter(b => b.items.length > 0);
-
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "16px", overflowY: "auto", backdropFilter: "blur(6px)" }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background: "#141414", maxWidth: "660px", width: "100%", borderRadius: "18px", border: "1px solid #1f1f1f", marginBottom: "20px" }}>
-
         <div style={{ padding: "20px 20px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
             {isBreaking(story) && <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", background: "#e74c3c", color: "white", padding: "2px 8px", borderRadius: "4px" }}>● BREAKING</span>}
@@ -233,14 +300,12 @@ function StoryModal({ story, onClose }) {
           {story.summary && <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "14px", color: "#666", lineHeight: "1.6", marginBottom: "16px" }}>{story.summary}</p>}
           <BiasBar cov={cov} />
         </div>
-
         {story.blindspot && (
           <div style={{ margin: "0 20px 14px", padding: "11px 14px", background: "#1a1200", border: "1px solid #2e2000", borderRadius: "10px" }}>
             <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#c8960c", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>⚠ Angle mort</div>
             <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#9a7020", margin: 0 }}>{story.blindspot.label}</p>
           </div>
         )}
-
         {buckets.length > 0 && (
           <div style={{ padding: "0 20px 16px" }}>
             <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#333", marginBottom: "12px" }}>Vue côte à côte</div>
@@ -274,7 +339,6 @@ function StoryModal({ story, onClose }) {
             </div>
           </div>
         )}
-
         {articles.length > 0 && (
           <div style={{ padding: "0 20px 20px" }}>
             <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#333", marginBottom: "12px" }}>Tous les articles · {articles.length}</div>
@@ -305,28 +369,235 @@ function StoryModal({ story, onClose }) {
   );
 }
 
-function PaywallModal({ onClose, onPremium }) {
+function AngleMortTab({ isPremium, onPremium }) {
+  const [stories, setStories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+  const [filter, setFilter] = useState("all");
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/stories?limit=100`)
+      .then(r => r.json())
+      .then(d => { setStories((d.stories || []).filter(s => s.blindspot)); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const filtered = filter === "all" ? stories : stories.filter(s => s.blindspot?.sides?.includes(filter));
+
+  const handleClick = async (story) => {
+    if (!isPremium) { onPremium(); return; }
+    setSelected(story);
+    if (!story.articles && story.id) {
+      try { setSelected(await (await fetch(`${API_URL}/api/stories/${story.id}`)).json()); } catch {}
+    }
+  };
+
+  const counts = stories.reduce((acc, s) => { (s.blindspot?.sides || []).forEach(side => { acc[side] = (acc[side] || 0) + 1; }); return acc; }, {});
+
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", backdropFilter: "blur(8px)" }}>
-      <div style={{ background: "#141414", maxWidth: "380px", width: "100%", borderRadius: "20px", border: "1px solid #1f1f1f" }}>
-        <div style={{ padding: "30px 26px 22px", textAlign: "center", borderBottom: "1px solid #191919" }}>
-          <Logo />
-          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.15em", color: "#333", marginTop: "18px", marginBottom: "8px", textTransform: "uppercase" }}>Limite quotidienne atteinte</div>
-          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "18px", fontWeight: "700", color: "#f0ede8", lineHeight: "1.3" }}>Vous avez lu vos {FREE_LIMIT} histoires gratuites d'aujourd'hui</h2>
-        </div>
-        <div style={{ padding: "22px 26px" }}>
-          {[{ label: "Mensuel", price: "4,99€", sub: "par mois", hi: false }, { label: "Annuel", price: "49€", sub: "par an · −18%", hi: true }].map(({ label, price, sub, hi }) => (
-            <button key={label} onClick={onPremium} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "14px 16px", marginBottom: "8px", border: `1.5px solid ${hi ? "#e74c3c" : "#222"}`, background: hi ? "#1c0808" : "transparent", cursor: "pointer", borderRadius: "10px" }}>
-              <span style={{ fontFamily: "'Playfair Display', serif", fontSize: "15px", fontWeight: "700", color: "#f0ede8" }}>{label}</span>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "17px", fontWeight: "700", color: hi ? "#e74c3c" : "#f0ede8" }}>{price}</div>
-                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#333" }}>{sub}</div>
-              </div>
-            </button>
+    <div style={{ paddingBottom: "80px" }}>
+      <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "20px", fontWeight: "700", color: "#f0ede8", marginBottom: "4px" }}>Angles morts</h2>
+      <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#444", lineHeight: "1.5", marginBottom: "16px" }}>Ce qu'un camp politique choisit de ne pas couvrir.</p>
+
+      {!loading && stories.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", marginBottom: "16px" }}>
+          {[["gauche", "#e74c3c", "Ignoré par la gauche"], ["centre", "#888", "Ignoré par le centre"], ["droite", "#3d7ebf", "Ignoré par la droite"]].map(([side, color, label]) => (
+            <div key={side} style={{ background: "#161616", border: `1px solid ${color}22`, borderRadius: "10px", padding: "12px", textAlign: "center" }}>
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "22px", fontWeight: "700", color, marginBottom: "4px" }}>{counts[side] || 0}</div>
+              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8px", color: "#333", letterSpacing: "0.06em", lineHeight: "1.3" }}>{label}</div>
+            </div>
           ))}
-          <button onClick={onClose} style={{ width: "100%", padding: "10px", background: "transparent", border: "none", cursor: "pointer", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#2a2a2a", marginTop: "4px" }}>Revenir demain</button>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: "6px", marginBottom: "14px" }}>
+        {[["all", "Tous", "#888"], ["gauche", "Gauche", "#e74c3c"], ["centre", "Centre", "#888"], ["droite", "Droite", "#3d7ebf"]].map(([val, label, color]) => (
+          <button key={val} onClick={() => setFilter(val)} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", padding: "5px 12px", border: `1px solid ${filter === val ? color : "#1f1f1f"}`, background: filter === val ? `${color}18` : "#161616", color: filter === val ? color : "#3a3a3a", cursor: "pointer", borderRadius: "20px", transition: "all 0.15s" }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {!isPremium && (
+        <div style={{ padding: "14px 16px", background: "#1c0808", border: "1px solid #3d1010", borderRadius: "12px", marginBottom: "14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+          <div>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#e74c3c", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>Fonctionnalité Premium</div>
+            <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#666", margin: 0 }}>Accédez aux angles morts et à l'analyse complète.</p>
+          </div>
+          <button onClick={onPremium} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.08em", background: "#e74c3c", color: "white", border: "none", padding: "8px 14px", borderRadius: "6px", cursor: "pointer", whiteSpace: "nowrap" }}>Débloquer</button>
+        </div>
+      )}
+
+      {loading && <div style={{ width: "22px", height: "22px", border: "2px solid #1f1f1f", borderTopColor: "#e74c3c", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "40px auto" }} />}
+
+      {!loading && filtered.length === 0 && (
+        <div style={{ textAlign: "center", padding: "40px 20px", background: "#161616", borderRadius: "12px", border: "1px solid #1f1f1f" }}>
+          <div style={{ fontSize: "24px", marginBottom: "8px" }}>✅</div>
+          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "16px", color: "#444" }}>Aucun angle mort détecté</div>
+          <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#2a2a2a", marginTop: "6px" }}>La couverture est équilibrée pour le moment.</p>
+        </div>
+      )}
+
+      {!loading && filtered.map((s, i) => (
+        <div key={s.id || i} style={{ animation: `fadeUp 0.3s ease ${i * 0.04}s both` }}>
+          <StoryCard story={s} onClick={handleClick} locked={false} onLock={() => {}} compact />
+        </div>
+      ))}
+
+      {selected && <StoryModal story={selected} onClose={() => setSelected(null)} />}
+    </div>
+  );
+}
+
+function ProfilTab({ isPremium, onPremium }) {
+  const [profile] = useState(getProfile());
+  const total = profile.gauche + profile.centre + profile.droite;
+  const gPct = total > 0 ? Math.round((profile.gauche / total) * 100) : 0;
+  const cPct = total > 0 ? Math.round((profile.centre / total) * 100) : 0;
+  const dPct = total > 0 ? Math.round((profile.droite / total) * 100) : 0;
+  const reads = getReadsToday();
+
+  const dominant = total === 0 ? null
+    : gPct > 60 ? { label: "Vous lisez majoritairement à gauche", color: "#e74c3c", missing: "droite et centre" }
+    : dPct > 60 ? { label: "Vous lisez majoritairement à droite", color: "#3d7ebf", missing: "gauche et centre" }
+    : cPct > 60 ? { label: "Vous lisez majoritairement le centre", color: "#888", missing: "gauche et droite" }
+    : { label: "Votre lecture est équilibrée 🎉", color: "#1e8449", missing: null };
+
+  const topSources = Object.entries(profile.sources).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  return (
+    <div style={{ paddingBottom: "80px" }}>
+      <div style={{ background: "#161616", border: "1px solid #1f1f1f", borderRadius: "14px", padding: "22px", marginBottom: "12px", textAlign: "center" }}>
+        <div style={{ width: "52px", height: "52px", borderRadius: "50%", background: "#1f1f1f", border: "1px solid #252525", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px", fontSize: "20px" }}>👤</div>
+        <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "16px", fontWeight: "700", color: "#f0ede8", marginBottom: "3px" }}>Mon Profil Médiatique</div>
+        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: isPremium ? "#1e8449" : "#333", letterSpacing: "0.1em" }}>{isPremium ? "● COMPTE PREMIUM" : "Compte gratuit"}</div>
+      </div>
+
+      {total === 0 ? (
+        <div style={{ background: "#161616", border: "1px solid #1f1f1f", borderRadius: "12px", padding: "20px", marginBottom: "12px", textAlign: "center" }}>
+          <div style={{ fontSize: "24px", marginBottom: "8px" }}>📊</div>
+          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "15px", color: "#444", marginBottom: "6px" }}>Pas encore de données</div>
+          <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#2a2a2a", lineHeight: "1.5" }}>Lisez quelques histoires pour voir votre profil apparaître ici.</p>
+        </div>
+      ) : (
+        <div style={{ background: "#161616", border: "1px solid #1f1f1f", borderRadius: "12px", padding: "18px", marginBottom: "12px" }}>
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#333", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "14px" }}>Votre spectre de lecture</div>
+          <div style={{ display: "flex", height: "10px", borderRadius: "5px", overflow: "hidden", marginBottom: "10px", gap: "2px" }}>
+            {gPct > 0 && <div style={{ width: `${gPct}%`, background: "#e74c3c", transition: "width 0.8s ease" }} />}
+            {cPct > 0 && <div style={{ width: `${cPct}%`, background: "#555", transition: "width 0.8s ease" }} />}
+            {dPct > 0 && <div style={{ width: `${dPct}%`, background: "#3d7ebf", transition: "width 0.8s ease" }} />}
+          </div>
+          <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
+            {[["Gauche", gPct, "#e74c3c"], ["Centre", cPct, "#888"], ["Droite", dPct, "#3d7ebf"]].map(([label, pct, color]) => (
+              <div key={label} style={{ flex: 1, textAlign: "center", background: "#0f0f0f", borderRadius: "8px", padding: "10px 6px", border: `1px solid ${color}22` }}>
+                <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "20px", fontWeight: "700", color, marginBottom: "2px" }}>{pct}%</div>
+                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8px", color: "#333" }}>{label}</div>
+              </div>
+            ))}
+          </div>
+          {dominant && (
+            <div style={{ padding: "12px 14px", background: `${dominant.color}12`, border: `1px solid ${dominant.color}30`, borderRadius: "8px", marginBottom: dominant.missing && isPremium ? "10px" : 0 }}>
+              <div style={{ fontFamily: "'Source Serif 4', serif", fontSize: "14px", color: dominant.color, fontWeight: "600" }}>{dominant.label}</div>
+            </div>
+          )}
+          {dominant?.missing && isPremium && (
+            <div style={{ padding: "12px 14px", background: "#1a1200", border: "1px solid #2e2000", borderRadius: "8px" }}>
+              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#c8960c", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>⚠ Votre angle mort personnel</div>
+              <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#9a7020", margin: 0 }}>Vous lisez peu de sources {dominant.missing}. Explorez les médias dans l'onglet Sources.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {topSources.length > 0 && (
+        <div style={{ background: "#161616", border: "1px solid #1f1f1f", borderRadius: "12px", overflow: "hidden", marginBottom: "12px" }}>
+          <div style={{ padding: "14px 16px", borderBottom: "1px solid #191919" }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#333", letterSpacing: "0.12em", textTransform: "uppercase" }}>Vos sources favorites</div>
+          </div>
+          {topSources.map(([id, count], i) => {
+            const src = getSource(id);
+            return (
+              <div key={id} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 16px", borderBottom: i < topSources.length - 1 ? "1px solid #191919" : "none" }}>
+                <SrcChip id={id} size={28} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#888" }}>{src.name}</div>
+                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: ORI_COLOR[src.orientation] || "#444" }}>● {src.orientation}</div>
+                </div>
+                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#2a2a2a" }}>{count} lu{count > 1 ? "es" : ""}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "12px" }}>
+        <div style={{ background: "#161616", border: "1px solid #1f1f1f", borderRadius: "10px", padding: "14px", textAlign: "center" }}>
+          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "24px", fontWeight: "700", color: "#e74c3c", marginBottom: "3px" }}>{reads}</div>
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8px", color: "#333", letterSpacing: "0.06em" }}>AUJOURD'HUI</div>
+        </div>
+        <div style={{ background: "#161616", border: "1px solid #1f1f1f", borderRadius: "10px", padding: "14px", textAlign: "center" }}>
+          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "24px", fontWeight: "700", color: "#f0ede8", marginBottom: "3px" }}>{profile.total}</div>
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8px", color: "#333", letterSpacing: "0.06em" }}>AU TOTAL</div>
         </div>
       </div>
+
+      {!isPremium && (
+        <div style={{ background: "#1c0808", border: "1px solid #3d1010", borderRadius: "12px", padding: "16px", textAlign: "center", marginBottom: "12px" }}>
+          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "15px", fontWeight: "700", color: "#f0ede8", marginBottom: "5px" }}>Débloquez votre profil complet</div>
+          <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#555", lineHeight: "1.5", marginBottom: "12px" }}>Angle mort personnel, historique complet, recommandations.</p>
+          <button onClick={onPremium} style={{ width: "100%", padding: "12px", background: "#e74c3c", color: "white", border: "none", borderRadius: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer" }}>Passer à Premium</button>
+        </div>
+      )}
+
+      <div style={{ background: "#0a1a0a", border: "1px dashed #1e8449", borderRadius: "12px", padding: "16px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+          <span style={{ fontSize: "16px" }}>🏛️</span>
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#1e8449", letterSpacing: "0.1em", textTransform: "uppercase" }}>Bientôt · Tracker Politique</div>
+        </div>
+        <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#2a4a2a", lineHeight: "1.5", margin: "0 0 6px" }}>Tweets des politiciens en temps réel. Disponible pour les Sénatoriales 2026.</p>
+        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#1a3a1a" }}>Macron · Le Pen · Mélenchon · Bardella · +50</div>
+      </div>
+    </div>
+  );
+}
+
+function SourcesTab() {
+  const [filter, setFilter] = useState("all");
+  const filtered = filter === "all" ? SOURCES : SOURCES.filter(s => filter === "gauche" ? s.orientationScore <= 1 : filter === "centre" ? s.orientationScore > 1 && s.orientationScore < 4 : s.orientationScore >= 4);
+  return (
+    <div style={{ paddingBottom: "80px" }}>
+      <div style={{ display: "flex", gap: "6px", marginBottom: "12px" }}>
+        {["all", "gauche", "centre", "droite"].map(f => (
+          <button key={f} onClick={() => setFilter(f)} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", padding: "5px 12px", border: "1px solid", borderColor: filter === f ? "#e74c3c" : "#1f1f1f", background: filter === f ? "#1c0808" : "#161616", color: filter === f ? "#e74c3c" : "#3a3a3a", cursor: "pointer", borderRadius: "20px" }}>
+            {f === "all" ? "Tous" : f}
+          </button>
+        ))}
+      </div>
+      {filtered.map(src => (
+        <div key={src.id} style={{ background: "#161616", border: "1px solid #1f1f1f", borderRadius: "12px", padding: "13px 15px", marginBottom: "7px", display: "flex", gap: "12px" }}>
+          <SrcChip id={src.id} size={42} />
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "5px", flexWrap: "wrap" }}>
+              <span style={{ fontFamily: "'Playfair Display', serif", fontSize: "15px", fontWeight: "700", color: "#f0ede8" }}>{src.name}</span>
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: ORI_COLOR[src.orientation] || "#555" }}>● {src.orientation}</span>
+            </div>
+            <div style={{ display: "flex", gap: "14px", flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8px", color: "#2a2a2a", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "2px" }}>Fiabilité</div>
+                <div style={{ fontFamily: "'Source Serif 4', serif", fontSize: "12px", color: src.factuality === "Élevée" ? "#1e8449" : src.factuality === "Mixte" ? "#b7770d" : "#c0392b" }}>{src.factuality}</div>
+              </div>
+              <div>
+                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8px", color: "#2a2a2a", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "2px" }}>Propriétaire</div>
+                <div style={{ fontFamily: "'Source Serif 4', serif", fontSize: "12px", color: "#555" }}>{src.owner}</div>
+              </div>
+              <div>
+                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8px", color: "#2a2a2a", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "2px" }}>Type</div>
+                <span style={{ fontSize: "9px", fontFamily: "'IBM Plex Mono', monospace", color: "white", background: OWNER_TYPE_COLOR[src.ownerType] || "#222", padding: "2px 8px", borderRadius: "3px" }}>{src.ownerType}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -358,6 +629,7 @@ function FeedTab({ isPremium, onPremium }) {
   const handleClick = async (story) => {
     if (!isPremium && reads >= FREE_LIMIT) { setShowPaywall(true); return; }
     setSelected(story);
+    updateProfile(story.sourceIds || story.source_ids || []);
     setReads(incrementReads());
     if (!story.articles && story.id) {
       try { setSelected(await (await fetch(`${API_URL}/api/stories/${story.id}`)).json()); } catch {}
@@ -372,7 +644,6 @@ function FeedTab({ isPremium, onPremium }) {
           style={{ width: "100%", padding: "11px 12px 11px 36px", border: "1px solid #1f1f1f", background: "#161616", fontFamily: "'Source Serif 4', serif", fontSize: "14px", color: "#f0ede8", borderRadius: "10px", outline: "none" }} />
         {search && <button onClick={() => setSearch("")} style={{ position: "absolute", right: "11px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#333", fontSize: "18px" }}>×</button>}
       </div>
-
       <div style={{ display: "flex", gap: "6px", overflowX: "auto", marginBottom: "12px", paddingBottom: "2px" }}>
         {CATEGORIES.map(cat => (
           <button key={cat} onClick={() => setCategory(cat)} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.05em", padding: "5px 12px", border: "1px solid", borderColor: category === cat ? "#e74c3c" : "#1f1f1f", background: category === cat ? "#1c0808" : "#161616", color: category === cat ? "#e74c3c" : "#3a3a3a", cursor: "pointer", borderRadius: "20px", whiteSpace: "nowrap", transition: "all 0.15s" }}>
@@ -380,7 +651,6 @@ function FeedTab({ isPremium, onPremium }) {
           </button>
         ))}
       </div>
-
       {!isPremium && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", background: "#161616", borderRadius: "8px", marginBottom: "12px", border: "1px solid #1f1f1f" }}>
           <div style={{ display: "flex", gap: "5px", alignItems: "center" }}>
@@ -394,10 +664,8 @@ function FeedTab({ isPremium, onPremium }) {
           <button onClick={onPremium} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.08em", background: "#e74c3c", color: "white", border: "none", padding: "4px 10px", borderRadius: "4px", cursor: "pointer" }}>Premium</button>
         </div>
       )}
-
       {loading && <div style={{ width: "22px", height: "22px", border: "2px solid #1f1f1f", borderTopColor: "#e74c3c", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "60px auto" }} />}
       {error && <div style={{ padding: "14px", background: "#1c0808", border: "1px solid #3d1010", borderRadius: "10px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", color: "#e74c3c" }}>{error}</div>}
-
       {!loading && breaking.length > 0 && (
         <div style={{ marginBottom: "16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "10px" }}>
@@ -408,130 +676,16 @@ function FeedTab({ isPremium, onPremium }) {
           <div style={{ height: "1px", background: "#191919", margin: "14px 0" }} />
         </div>
       )}
-
       {!loading && !error && regular.map((s, i) => (
         <div key={s.id || i} style={{ animation: `fadeUp 0.3s ease ${Math.min(i, 8) * 0.035}s both` }}>
           <StoryCard story={s} onClick={handleClick} locked={!isPremium && reads + i >= FREE_LIMIT} onLock={() => setShowPaywall(true)} />
         </div>
       ))}
-
       {!loading && filtered.length === 0 && search && (
         <div style={{ textAlign: "center", padding: "50px 20px", fontFamily: "'Source Serif 4', serif", fontSize: "15px", color: "#2a2a2a" }}>Aucun résultat pour «{search}»</div>
       )}
-
       {selected && <StoryModal story={selected} onClose={() => setSelected(null)} />}
       {showPaywall && <PaywallModal onClose={() => setShowPaywall(false)} onPremium={() => { onPremium(); setShowPaywall(false); }} />}
-    </div>
-  );
-}
-
-function SourcesTab() {
-  const [filter, setFilter] = useState("all");
-  const filtered = filter === "all" ? SOURCES : SOURCES.filter(s => {
-    if (filter === "gauche") return s.orientationScore <= 1;
-    if (filter === "centre") return s.orientationScore > 1 && s.orientationScore < 4;
-    return s.orientationScore >= 4;
-  });
-  return (
-    <div style={{ paddingBottom: "80px" }}>
-      <div style={{ display: "flex", gap: "6px", marginBottom: "12px" }}>
-        {["all", "gauche", "centre", "droite"].map(f => (
-          <button key={f} onClick={() => setFilter(f)} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", padding: "5px 12px", border: "1px solid", borderColor: filter === f ? "#e74c3c" : "#1f1f1f", background: filter === f ? "#1c0808" : "#161616", color: filter === f ? "#e74c3c" : "#3a3a3a", cursor: "pointer", borderRadius: "20px" }}>
-            {f === "all" ? "Tous" : f}
-          </button>
-        ))}
-      </div>
-      {filtered.map(src => (
-        <div key={src.id} style={{ background: "#161616", border: "1px solid #1f1f1f", borderRadius: "12px", padding: "13px 15px", marginBottom: "7px", display: "flex", gap: "12px" }}>
-          <SrcChip id={src.id} size={42} />
-          <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "5px", flexWrap: "wrap" }}>
-              <span style={{ fontFamily: "'Playfair Display', serif", fontSize: "15px", fontWeight: "700", color: "#f0ede8" }}>{src.name}</span>
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: ORI_COLOR[src.orientation] || "#555" }}>● {src.orientation}</span>
-            </div>
-            <div style={{ display: "flex", gap: "14px", flexWrap: "wrap" }}>
-              <div>
-                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8px", color: "#2a2a2a", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "2px" }}>Fiabilité</div>
-                <div style={{ fontFamily: "'Source Serif 4', serif", fontSize: "12px", color: src.factuality === "Élevée" ? "#1e8449" : src.factuality === "Mixte" ? "#b7770d" : "#c0392b" }}>{src.factuality}</div>
-              </div>
-              <div>
-                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8px", color: "#2a2a2a", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "2px" }}>Propriétaire</div>
-                <div style={{ fontFamily: "'Source Serif 4', serif", fontSize: "12px", color: "#555" }}>{src.owner}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function OwnershipTab() {
-  const groups = Object.values(SOURCES.reduce((acc, src) => {
-    if (!acc[src.owner]) acc[src.owner] = { owner: src.owner, type: src.ownerType, sources: [] };
-    acc[src.owner].sources.push(src);
-    return acc;
-  }, {}));
-  return (
-    <div style={{ paddingBottom: "80px" }}>
-      <div style={{ padding: "11px 13px", background: "#1a1200", border: "1px solid #2e2000", borderRadius: "10px", marginBottom: "12px" }}>
-        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#c8960c", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>Pourquoi c'est important</div>
-        <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#8a6820", lineHeight: "1.5", margin: 0 }}>4 milliardaires contrôlent l'essentiel des médias français.</p>
-      </div>
-      {groups.map((g, i) => (
-        <div key={i} style={{ background: "#161616", border: "1px solid #1f1f1f", borderRadius: "12px", overflow: "hidden", marginBottom: "7px" }}>
-          <div style={{ padding: "12px 15px", borderBottom: "1px solid #191919", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div>
-              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "14px", fontWeight: "700", color: "#f0ede8", marginBottom: "4px" }}>{g.owner}</div>
-              <span style={{ fontSize: "9px", fontFamily: "'IBM Plex Mono', monospace", color: "white", background: OWNER_TYPE_COLOR[g.type] || "#222", padding: "2px 8px", borderRadius: "3px" }}>{g.type}</span>
-            </div>
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#2a2a2a" }}>{g.sources.length} titre{g.sources.length > 1 ? "s" : ""}</span>
-          </div>
-          <div style={{ padding: "10px 15px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
-            {g.sources.map(src => (
-              <div key={src.id} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "5px 8px", background: "#0f0f0f", borderRadius: "6px", border: "1px solid #191919" }}>
-                <SrcChip id={src.id} size={18} />
-                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#555" }}>{src.name}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ProfileTab({ isPremium, onPremium }) {
-  return (
-    <div style={{ paddingBottom: "80px" }}>
-      <div style={{ background: "#161616", border: "1px solid #1f1f1f", borderRadius: "14px", padding: "22px", marginBottom: "10px", textAlign: "center" }}>
-        <div style={{ width: "52px", height: "52px", borderRadius: "50%", background: "#1f1f1f", border: "1px solid #252525", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px", fontSize: "20px" }}>👤</div>
-        <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "16px", fontWeight: "700", color: "#f0ede8", marginBottom: "3px" }}>Visiteur</div>
-        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: isPremium ? "#1e8449" : "#333", letterSpacing: "0.1em" }}>{isPremium ? "● COMPTE PREMIUM" : "Compte gratuit"}</div>
-      </div>
-      {!isPremium && (
-        <div style={{ background: "#1c0808", border: "1px solid #3d1010", borderRadius: "12px", padding: "16px", marginBottom: "10px" }}>
-          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "15px", fontWeight: "700", color: "#f0ede8", marginBottom: "5px" }}>Passez à Premium</div>
-          <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#555", lineHeight: "1.5", marginBottom: "12px" }}>Lectures illimitées, données de propriété, rapport d'angle mort personnel.</p>
-          <button onClick={onPremium} style={{ width: "100%", padding: "12px", background: "#e74c3c", color: "white", border: "none", borderRadius: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer" }}>Essayer Premium</button>
-        </div>
-      )}
-      <div style={{ background: "#161616", border: "1px solid #1f1f1f", borderRadius: "12px", overflow: "hidden" }}>
-        {[
-          { icon: "📊", label: "Lectures aujourd'hui", value: `${getReadsToday()}/${isPremium ? "∞" : FREE_LIMIT}` },
-          { icon: "🎯", label: "Mon angle mort", value: isPremium ? "Voir" : "Premium" },
-          { icon: "🔔", label: "Alertes", value: "Bientôt" },
-          { icon: "📧", label: "Digest hebdo", value: "Bientôt" },
-        ].map(({ icon, label, value }, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 15px", borderBottom: i < 3 ? "1px solid #191919" : "none" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <span style={{ fontSize: "15px" }}>{icon}</span>
-              <span style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#666" }}>{label}</span>
-            </div>
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: value === "Premium" ? "#e74c3c" : "#2a2a2a" }}>{value}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -539,11 +693,12 @@ function ProfileTab({ isPremium, onPremium }) {
 export default function MédiaVue() {
   const [tab, setTab] = useState("news");
   const [isPremium, setIsPremium] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
   const navItems = [
     { id: "news", icon: "📰", label: "Actualités" },
-    { id: "blindspot", icon: "🎯", label: "Angles morts" },
+    { id: "blindspot", icon: "⚠️", label: "Angles morts" },
     { id: "sources", icon: "📋", label: "Sources" },
-    { id: "profile", icon: "👤", label: "Profil" },
+    { id: "profile", icon: "👤", label: "Mon Profil" },
   ];
   return (
     <>
@@ -562,36 +717,31 @@ export default function MédiaVue() {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <Logo />
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              {isPremium && <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#1e8449", border: "1px solid #1e8449", padding: "2px 8px", borderRadius: "10px" }}>PREMIUM</span>}
+              {isPremium
+                ? <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#1e8449", border: "1px solid #1e8449", padding: "2px 8px", borderRadius: "10px" }}>PREMIUM</span>
+                : <button onClick={() => setShowPaywall(true)} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.08em", background: "#e74c3c", color: "white", border: "none", padding: "4px 10px", borderRadius: "4px", cursor: "pointer" }}>Premium</button>
+              }
               <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#1f1f1f" }}>{new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}</span>
             </div>
           </div>
         </header>
         <div style={{ padding: "13px 13px 0" }}>
-          {tab === "news" && <FeedTab isPremium={isPremium} onPremium={() => setIsPremium(true)} />}
-          {tab === "blindspot" && (
-            <div style={{ paddingBottom: "80px" }}>
-              <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "20px", fontWeight: "700", color: "#f0ede8", marginBottom: "5px" }}>Angles morts</h2>
-              <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#333", marginBottom: "18px" }}>Histoires ignorées par un camp politique</p>
-              <div style={{ padding: "32px 20px", textAlign: "center", background: "#161616", borderRadius: "12px", border: "1px solid #1f1f1f" }}>
-                <div style={{ fontSize: "26px", marginBottom: "8px" }}>🎯</div>
-                <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "15px", color: "#333" }}>Bientôt disponible</div>
-              </div>
-            </div>
-          )}
+          {tab === "news" && <FeedTab isPremium={isPremium} onPremium={() => setShowPaywall(true)} />}
+          {tab === "blindspot" && <AngleMortTab isPremium={isPremium} onPremium={() => setShowPaywall(true)} />}
           {tab === "sources" && <SourcesTab />}
-          {tab === "profile" && <ProfileTab isPremium={isPremium} onPremium={() => setIsPremium(true)} />}
+          {tab === "profile" && <ProfilTab isPremium={isPremium} onPremium={() => setShowPaywall(true)} />}
         </div>
         <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "480px", background: "#0a0a0a", borderTop: "1px solid #161616", display: "flex", zIndex: 200, paddingBottom: "env(safe-area-inset-bottom, 5px)" }}>
           {navItems.map(({ id, icon, label }) => (
             <button key={id} onClick={() => setTab(id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", padding: "10px 0 7px", background: "transparent", border: "none", cursor: "pointer" }}>
               <span style={{ fontSize: "17px", filter: tab === id ? "none" : "grayscale(1)", opacity: tab === id ? 1 : 0.25, transition: "all 0.15s" }}>{icon}</span>
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8px", letterSpacing: "0.08em", color: tab === id ? "#e74c3c" : "#2a2a2a", textTransform: "uppercase", transition: "color 0.15s" }}>{label}</span>
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8px", letterSpacing: "0.06em", color: tab === id ? "#e74c3c" : "#2a2a2a", textTransform: "uppercase", transition: "color 0.15s" }}>{label}</span>
               {tab === id && <div style={{ width: "14px", height: "2px", background: "#e74c3c", borderRadius: "1px", marginTop: "1px" }} />}
             </button>
           ))}
         </nav>
       </div>
+      {showPaywall && <PaywallModal onClose={() => setShowPaywall(false)} onPremium={() => { setIsPremium(true); setShowPaywall(false); }} />}
     </>
   );
 }
