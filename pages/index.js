@@ -49,7 +49,7 @@ function getSource(id) {
 
 function isBreaking(story) {
   if (!story.published_at) return false;
-  return (Date.now() - new Date(story.published_at)) / 3600000 < 2 && (story.coverage_count || 0) >= 3;
+  return (Date.now() - new Date(story.published_at)) / 3600000 < 2 && (story.coverageCount || story.coverage_count || 0) >= 3;
 }
 
 function getScore(cov) {
@@ -135,8 +135,8 @@ function ScorePill({ score }) {
 }
 
 function StoryCard({ story, onClick, locked, onLock }) {
-  const cov = story.coverage_by_orientation || {};
-  const srcIds = story.source_ids || [];
+  const cov = story.coverageByOrientation || story.coverage_by_orientation || {};
+  const srcIds = story.sourceIds || story.source_ids || [];
   const img = story.articles?.[0]?.image_url;
   const breaking = isBreaking(story);
 
@@ -169,7 +169,7 @@ function StoryCard({ story, onClick, locked, onLock }) {
           {!img && breaking && <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", background: "#e74c3c", color: "white", padding: "2px 8px", borderRadius: "4px" }}>● BREAKING</span>}
           <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#3a3a3a", letterSpacing: "0.1em", textTransform: "uppercase" }}>{story.category || "Actualité"}</span>
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "6px" }}>
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#2a2a2a" }}>{story.coverage_count || srcIds.length} sources</span>
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#2a2a2a" }}>{story.coverageCount || story.coverage_count || srcIds.length} sources</span>
             <ScorePill score={getScore(cov)} />
           </div>
         </div>
@@ -207,11 +207,11 @@ function StoryCard({ story, onClick, locked, onLock }) {
 function StoryModal({ story, onClose }) {
   if (!story) return null;
   const articles = story.articles || [];
-  const cov = story.coverage_by_orientation || {};
+  const cov = story.coverageByOrientation || story.coverage_by_orientation || {};
 
-  const gauche = articles.filter(a => (getSource(a.source_id)?.orientationScore ?? 3) <= 1);
-  const centre = articles.filter(a => { const s = getSource(a.source_id)?.orientationScore ?? 3; return s > 1 && s < 4; });
-  const droite = articles.filter(a => (getSource(a.source_id)?.orientationScore ?? 3) >= 4);
+  const gauche = articles.filter(a => (getSource(a.sourceId || a.source_id)?.orientationScore ?? 3) <= 1);
+  const centre = articles.filter(a => { const s = getSource(a.sourceId || a.source_id)?.orientationScore ?? 3; return s > 1 && s < 4; });
+  const droite = articles.filter(a => (getSource(a.sourceId || a.source_id)?.orientationScore ?? 3) >= 4);
   const buckets = [
     { key: "Gauche", color: "#e74c3c", bg: "#1c0808", items: gauche },
     { key: "Centre", color: "#888", bg: "#111", items: centre },
@@ -253,11 +253,11 @@ function StoryModal({ story, onClose }) {
                     <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#222", marginLeft: "auto" }}>{items.length}</span>
                   </div>
                   {items.slice(0, 3).map((a, i) => {
-                    const src = getSource(a.source_id);
+                    const src = getSource(a.sourceId || a.source_id);
                     return (
                       <div key={i} style={{ marginBottom: i < Math.min(items.length, 3) - 1 ? "10px" : 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px" }}>
-                          <SrcChip id={a.source_id} size={16} />
+                          <SrcChip id={a.sourceId || a.source_id} size={16} />
                           <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#444" }}>{src.name}</span>
                         </div>
                         <a href={a.url} target="_blank" rel="noopener noreferrer"
@@ -279,10 +279,10 @@ function StoryModal({ story, onClose }) {
           <div style={{ padding: "0 20px 20px" }}>
             <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#333", marginBottom: "12px" }}>Tous les articles · {articles.length}</div>
             {articles.map((a, i) => {
-              const src = getSource(a.source_id);
+              const src = getSource(a.sourceId || a.source_id);
               return (
                 <div key={i} style={{ display: "flex", gap: "11px", alignItems: "flex-start", paddingBottom: "11px", borderBottom: i < articles.length - 1 ? "1px solid #191919" : "none", marginBottom: "11px" }}>
-                  <SrcChip id={a.source_id} size={28} />
+                  <SrcChip id={a.sourceId || a.source_id} size={28} />
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "4px" }}>
                       <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#666" }}>{src.name}</span>
