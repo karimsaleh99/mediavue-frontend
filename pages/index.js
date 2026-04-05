@@ -1,4 +1,9 @@
 import { useState, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+const SUPABASE_URL = "https://ffkksnejsgxeglqhjujy.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZma2tzbmVqc2d4ZWdscWhqdWp5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMjEzNjEsImV4cCI6MjA5MDg5NzM2MX0.0DoVlYkw12jAW1gbMYv5dMu1QE5U9af47H3PQtySmPc";
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const API_URL = "https://mediavue-backend-production.up.railway.app";
 const FREE_LIMIT = 5;
@@ -46,11 +51,7 @@ const POLITICIANS = [
 ];
 
 const CATEGORIES = ["Tout", "Politique", "Économie", "Social", "International", "Justice", "Médias", "Technologie", "Environnement"];
-
-const ORI_COLOR = {
-  "gauche": "#e74c3c", "centre-gauche": "#e67e22", "centre": "#7f8c8d",
-  "centre-droite": "#3498db", "droite": "#5d6d7e", "droite extrême": "#3d3d3d",
-};
+const ORI_COLOR = { "gauche": "#e74c3c", "centre-gauche": "#e67e22", "centre": "#7f8c8d", "centre-droite": "#3498db", "droite": "#5d6d7e", "droite extrême": "#3d3d3d" };
 
 function getSource(id) {
   return SOURCES.find(s => s.id === id) || { logo: (id || "?").slice(0, 2).toUpperCase(), color: "#2a2a2a", name: id || "Inconnu", orientation: "centre", orientationScore: 3 };
@@ -100,15 +101,161 @@ function toggleFollow(type, id) {
 }
 function isFollowing(type, id) { try { return getFollows()[type].includes(id); } catch { return false; } }
 
+// ── Auth Screen ───────────────────────────────────────────────────────────────
+
+function AuthScreen({ onAuth }) {
+  const [mode, setMode] = useState("login"); // login | signup | forgot
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const handleSubmit = async () => {
+    setError(""); setSuccess(""); setLoading(true);
+    try {
+      if (mode === "login") {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        onAuth(data.user);
+      } else if (mode === "signup") {
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        setSuccess("Vérifiez votre email pour confirmer votre compte.");
+      } else if (mode === "forgot") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: "https://mediavue.fr" });
+        if (error) throw error;
+        setSuccess("Email de réinitialisation envoyé.");
+      }
+    } catch (err) {
+      setError(err.message || "Une erreur est survenue.");
+    }
+    setLoading(false);
+  };
+
+  const handleGoogle = async () => {
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: "https://mediavue.fr" }
+    });
+    if (error) setError(error.message);
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#0a0a0a", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px", position: "relative", overflow: "hidden" }}>
+      <div style={{ position: "absolute", top: "-100px", left: "50%", transform: "translateX(-50%)", width: "400px", height: "400px", background: "radial-gradient(circle, #e74c3c0a 0%, transparent 65%)", pointerEvents: "none" }} />
+
+      {/* Logo */}
+      <div style={{ marginBottom: "40px", textAlign: "center" }}>
+        <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "36px", fontWeight: "900", color: "white", letterSpacing: "-0.03em", marginBottom: "8px" }}>
+          Média<span style={{ color: "#e74c3c" }}>Vue</span>
+        </div>
+        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", color: "#333", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+          L'info vue de tous les angles
+        </div>
+      </div>
+
+      {/* Card */}
+      <div style={{ width: "100%", maxWidth: "380px", background: "#141414", borderRadius: "20px", border: "1px solid #1f1f1f", overflow: "hidden" }}>
+        {/* Tabs */}
+        {mode !== "forgot" && (
+          <div style={{ display: "flex", borderBottom: "1px solid #1f1f1f" }}>
+            {[["login", "Connexion"], ["signup", "Inscription"]].map(([m, label]) => (
+              <button key={m} onClick={() => { setMode(m); setError(""); setSuccess(""); }} style={{ flex: 1, padding: "16px", background: "transparent", border: "none", color: mode === m ? "white" : "#333", cursor: "pointer", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", borderBottom: mode === m ? "2px solid #e74c3c" : "2px solid transparent", transition: "all 0.15s" }}>{label}</button>
+            ))}
+          </div>
+        )}
+
+        <div style={{ padding: "28px 26px" }}>
+          {mode === "forgot" && (
+            <div style={{ marginBottom: "20px" }}>
+              <button onClick={() => { setMode("login"); setError(""); setSuccess(""); }} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", padding: 0, marginBottom: "16px" }}>← Retour</button>
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "18px", fontWeight: "700", color: "#f0ede8", marginBottom: "6px" }}>Mot de passe oublié</div>
+              <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#555" }}>Entrez votre email pour recevoir un lien de réinitialisation.</p>
+            </div>
+          )}
+
+          {/* Google button */}
+          {mode !== "forgot" && (
+            <>
+              <button onClick={handleGoogle} disabled={loading} style={{ width: "100%", padding: "13px", background: "#1f1f1f", border: "1px solid #2a2a2a", borderRadius: "10px", color: "#f0ede8", cursor: "pointer", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.06em", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", marginBottom: "16px", transition: "background 0.15s" }}
+                onMouseEnter={e => e.currentTarget.style.background = "#252525"}
+                onMouseLeave={e => e.currentTarget.style.background = "#1f1f1f"}>
+                <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                Continuer avec Google
+              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
+                <div style={{ flex: 1, height: "1px", background: "#1f1f1f" }} />
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#2a2a2a" }}>OU</span>
+                <div style={{ flex: 1, height: "1px", background: "#1f1f1f" }} />
+              </div>
+            </>
+          )}
+
+          {/* Email */}
+          <div style={{ marginBottom: "12px" }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#333", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "6px" }}>Email</div>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="vous@email.fr"
+              style={{ width: "100%", padding: "12px 14px", border: "1px solid #222", background: "#0f0f0f", fontFamily: "'Source Serif 4', serif", fontSize: "14px", color: "#f0ede8", borderRadius: "8px", outline: "none" }}
+              onFocus={e => e.target.style.borderColor = "#e74c3c"}
+              onBlur={e => e.target.style.borderColor = "#222"} />
+          </div>
+
+          {/* Password */}
+          {mode !== "forgot" && (
+            <div style={{ marginBottom: "20px" }}>
+              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#333", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "6px" }}>Mot de passe</div>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"
+                style={{ width: "100%", padding: "12px 14px", border: "1px solid #222", background: "#0f0f0f", fontFamily: "'Source Serif 4', serif", fontSize: "14px", color: "#f0ede8", borderRadius: "8px", outline: "none" }}
+                onFocus={e => e.target.style.borderColor = "#e74c3c"}
+                onBlur={e => e.target.style.borderColor = "#222"}
+                onKeyDown={e => e.key === "Enter" && handleSubmit()} />
+            </div>
+          )}
+
+          {/* Error / Success */}
+          {error && <div style={{ padding: "10px 12px", background: "#1c0808", border: "1px solid #3d1010", borderRadius: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", color: "#e74c3c", marginBottom: "14px" }}>{error}</div>}
+          {success && <div style={{ padding: "10px 12px", background: "#0a1a0a", border: "1px solid #1e8449", borderRadius: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", color: "#1e8449", marginBottom: "14px" }}>{success}</div>}
+
+          {/* Submit */}
+          <button onClick={handleSubmit} disabled={loading || !email} style={{ width: "100%", padding: "13px", background: email ? "#e74c3c" : "#1f1f1f", color: email ? "white" : "#333", border: "none", borderRadius: "10px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", cursor: email ? "pointer" : "default", transition: "all 0.15s" }}>
+            {loading ? "..." : mode === "login" ? "Se connecter" : mode === "signup" ? "Créer mon compte" : "Envoyer le lien"}
+          </button>
+
+          {/* Forgot password */}
+          {mode === "login" && (
+            <button onClick={() => { setMode("forgot"); setError(""); setSuccess(""); }} style={{ width: "100%", padding: "10px", background: "transparent", border: "none", cursor: "pointer", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#2a2a2a", marginTop: "8px" }}>
+              Mot de passe oublié ?
+            </button>
+          )}
+
+          {mode === "signup" && (
+            <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#222", textAlign: "center", marginTop: "12px", lineHeight: "1.6" }}>
+              En créant un compte, vous acceptez nos conditions d'utilisation.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Skip for now */}
+      <button onClick={() => onAuth(null)} style={{ marginTop: "20px", background: "transparent", border: "none", cursor: "pointer", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#222", letterSpacing: "0.06em" }}>
+        Continuer sans compte →
+      </button>
+    </div>
+  );
+}
+
+// ── UI Primitives ─────────────────────────────────────────────────────────────
+
 function Logo() {
   return <span style={{ fontFamily: "'Playfair Display', serif", fontSize: "20px", fontWeight: "900", color: "white", letterSpacing: "-0.03em" }}>Média<span style={{ color: "#e74c3c" }}>Vue</span></span>;
 }
-
 function SrcChip({ id, size = 26 }) {
   const s = getSource(id);
   return <div title={s.name} style={{ width: size, height: size, borderRadius: "5px", background: s.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: Math.max(7, size * 0.28), color: "white", fontFamily: "'IBM Plex Mono', monospace", fontWeight: "700", flexShrink: 0 }}>{s.logo}</div>;
 }
-
 function BiasBar({ cov }) {
   const g = cov?.gauche || 0, c = cov?.centre || 0, d = cov?.droite || 0;
   const total = g + c + d;
@@ -130,12 +277,10 @@ function BiasBar({ cov }) {
     </div>
   );
 }
-
 function ScorePill({ score }) {
   const { color, label } = score >= 80 ? { color: "#1e8449", label: "Équilibré" } : score >= 40 ? { color: "#b7770d", label: "Partiel" } : { color: "#c0392b", label: "Unilatéral" };
   return <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color, border: `1px solid ${color}44`, background: `${color}18`, padding: "2px 8px", borderRadius: "10px" }}><span style={{ width: 5, height: 5, borderRadius: "50%", background: color, display: "inline-block" }} />{label}</span>;
 }
-
 function FollowBtn({ type, id }) {
   const [following, setFollowing] = useState(() => isFollowing(type, id));
   const toggle = (e) => { e.stopPropagation(); setFollowing(toggleFollow(type, id)); };
@@ -143,6 +288,104 @@ function FollowBtn({ type, id }) {
     <button onClick={toggle} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.08em", padding: "5px 12px", border: `1px solid ${following ? "#1e8449" : "#2a2a2a"}`, background: following ? "#0a1a0a" : "transparent", color: following ? "#1e8449" : "#444", cursor: "pointer", borderRadius: "20px", transition: "all 0.15s", whiteSpace: "nowrap", flexShrink: 0 }}>
       {following ? "✓ Suivi" : "+ Suivre"}
     </button>
+  );
+}
+
+function PaywallModal({ onClose, user }) {
+  const [loading, setLoading] = useState(null);
+  const [showStudent, setShowStudent] = useState(false);
+  const [studentEmail, setStudentEmail] = useState("");
+  const [studentDone, setStudentDone] = useState(false);
+  const [error, setError] = useState("");
+
+  const checkout = async (plan) => {
+    if (!user || user === "guest") {
+      setError("Connectez-vous d'abord pour souscrire.");
+      return;
+    }
+    setLoading(plan);
+    setError("");
+    try {
+      const res = await fetch(`${API_URL}/api/stripe/create-checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan, userId: user.id, userEmail: user.email }),
+      });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+      else setError("Erreur lors de la création du paiement.");
+    } catch {
+      setError("Erreur de connexion. Réessayez.");
+    }
+    setLoading(null);
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", backdropFilter: "blur(8px)" }}>
+      <div style={{ background: "#141414", maxWidth: "400px", width: "100%", borderRadius: "20px", border: "1px solid #1f1f1f", overflow: "hidden" }}>
+        <div style={{ padding: "28px 26px 22px", textAlign: "center", borderBottom: "1px solid #191919" }}>
+          <Logo />
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.15em", color: "#333", marginTop: "18px", marginBottom: "8px", textTransform: "uppercase" }}>Limite quotidienne atteinte</div>
+          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "18px", fontWeight: "700", color: "#f0ede8", lineHeight: "1.3" }}>Vous avez lu vos {FREE_LIMIT} histoires gratuites aujourd'hui</h2>
+        </div>
+        <div style={{ padding: "20px 26px" }}>
+          {!showStudent ? (
+            <>
+              {error && <div style={{ padding: "10px 12px", background: "#1c0808", border: "1px solid #3d1010", borderRadius: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", color: "#e74c3c", marginBottom: "14px" }}>{error}</div>}
+
+              {[
+                { label: "Mensuel", price: "4,99€", sub: "par mois", hi: false, plan: "monthly" },
+                { label: "Annuel", price: "49€", sub: "par an · −18%", hi: true, plan: "annual" }
+              ].map(({ label, price, sub, hi, plan }) => (
+                <button key={plan} onClick={() => checkout(plan)} disabled={!!loading}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "14px 16px", marginBottom: "8px", border: `1.5px solid ${hi ? "#e74c3c" : "#222"}`, background: hi ? "#1c0808" : "transparent", cursor: "pointer", borderRadius: "10px", opacity: loading ? 0.7 : 1 }}>
+                  <span style={{ fontFamily: "'Playfair Display', serif", fontSize: "15px", fontWeight: "700", color: "#f0ede8" }}>
+                    {loading === plan ? "Chargement..." : label}
+                  </span>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "17px", fontWeight: "700", color: hi ? "#e74c3c" : "#f0ede8" }}>{price}</div>
+                    <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#444" }}>{sub}</div>
+                  </div>
+                </button>
+              ))}
+
+              <button onClick={() => setShowStudent(true)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "12px 16px", marginBottom: "12px", border: "1px dashed #1e8449", background: "#0a1a0a", cursor: "pointer", borderRadius: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span>🎓</span>
+                  <div style={{ textAlign: "left" }}>
+                    <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "14px", fontWeight: "700", color: "#f0ede8" }}>Tarif étudiant</div>
+                    <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#1e8449" }}>Vérification par email universitaire</div>
+                  </div>
+                </div>
+                <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "17px", fontWeight: "700", color: "#1e8449" }}>1,99€<span style={{ fontSize: "11px", color: "#555", fontWeight: "400" }}>/mois</span></div>
+              </button>
+
+              <button onClick={onClose} style={{ width: "100%", padding: "10px", background: "transparent", border: "none", cursor: "pointer", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#2a2a2a" }}>Revenir demain</button>
+              <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#1f1f1f", textAlign: "center", marginTop: "8px" }}>Paiement sécurisé par Stripe</p>
+            </>
+          ) : studentDone ? (
+            <div style={{ textAlign: "center", padding: "20px 0" }}>
+              <div style={{ fontSize: "28px", marginBottom: "12px" }}>📧</div>
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "17px", fontWeight: "700", color: "#f0ede8", marginBottom: "8px" }}>Demande envoyée</div>
+              <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#555", lineHeight: "1.5", marginBottom: "16px" }}>Nous vérifierons votre statut étudiant sous 24h.</p>
+              <button onClick={onClose} style={{ width: "100%", padding: "12px", background: "#1e8449", color: "white", border: "none", borderRadius: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer" }}>OK</button>
+            </div>
+          ) : (
+            <div>
+              <button onClick={() => setShowStudent(false)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", marginBottom: "14px", padding: 0 }}>← Retour</button>
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "16px", fontWeight: "700", color: "#f0ede8", marginBottom: "6px" }}>Tarif étudiant — 1,99€/mois</div>
+              <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#555", lineHeight: "1.5", marginBottom: "16px" }}>Entrez votre email universitaire. Nous activerons votre accès sous 24h.</p>
+              <input type="email" value={studentEmail} onChange={e => setStudentEmail(e.target.value)} placeholder="prenom.nom@univ-paris.fr"
+                style={{ width: "100%", padding: "12px 14px", border: "1px solid #222", background: "#0f0f0f", fontFamily: "'Source Serif 4', serif", fontSize: "14px", color: "#f0ede8", borderRadius: "8px", outline: "none", marginBottom: "10px" }} />
+              <button onClick={() => studentEmail.includes("@") && setStudentDone(true)}
+                style={{ width: "100%", padding: "12px", background: "#1e8449", color: "white", border: "none", borderRadius: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer", opacity: studentEmail.includes("@") ? 1 : 0.4 }}>
+                Envoyer ma demande
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -219,12 +462,7 @@ function StoryModal({ story, onClose }) {
           {story.summary && <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "14px", color: "#666", lineHeight: "1.6", marginBottom: "16px" }}>{story.summary}</p>}
           <BiasBar cov={cov} />
         </div>
-        {story.blindspot && (
-          <div style={{ margin: "0 20px 14px", padding: "11px 14px", background: "#1a1200", border: "1px solid #2e2000", borderRadius: "10px" }}>
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#c8960c", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>⚠ Angle mort</div>
-            <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#9a7020", margin: 0 }}>{story.blindspot.label}</p>
-          </div>
-        )}
+        {story.blindspot && <div style={{ margin: "0 20px 14px", padding: "11px 14px", background: "#1a1200", border: "1px solid #2e2000", borderRadius: "10px" }}><div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#c8960c", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>⚠ Angle mort</div><p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#9a7020", margin: 0 }}>{story.blindspot.label}</p></div>}
         {buckets.length > 0 && (
           <div style={{ padding: "0 20px 16px" }}>
             <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#333", marginBottom: "12px" }}>Vue côte à côte</div>
@@ -259,10 +497,7 @@ function StoryModal({ story, onClose }) {
                 <div key={i} style={{ display: "flex", gap: "11px", alignItems: "flex-start", paddingBottom: "11px", borderBottom: i < articles.length - 1 ? "1px solid #191919" : "none", marginBottom: "11px" }}>
                   <SrcChip id={a.sourceId || a.source_id} size={28} />
                   <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "4px" }}>
-                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#666" }}>{src.name}</span>
-                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: ORI_COLOR[src.orientation] || "#444" }}>● {src.orientation}</span>
-                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "4px" }}><span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#666" }}>{src.name}</span><span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: ORI_COLOR[src.orientation] || "#444" }}>● {src.orientation}</span></div>
                     <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#b0a898", textDecoration: "none", lineHeight: "1.4", display: "block" }} onMouseEnter={e => e.target.style.color = "#4a90d9"} onMouseLeave={e => e.target.style.color = "#b0a898"}>{a.title}</a>
                   </div>
                 </div>
@@ -275,57 +510,9 @@ function StoryModal({ story, onClose }) {
   );
 }
 
-function PaywallModal({ onClose, onPremium }) {
-  const [showStudent, setShowStudent] = useState(false);
-  const [email, setEmail] = useState("");
-  const [done, setDone] = useState(false);
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", backdropFilter: "blur(8px)" }}>
-      <div style={{ background: "#141414", maxWidth: "400px", width: "100%", borderRadius: "20px", border: "1px solid #1f1f1f", overflow: "hidden" }}>
-        <div style={{ padding: "28px 26px 22px", textAlign: "center", borderBottom: "1px solid #191919" }}>
-          <Logo />
-          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.15em", color: "#333", marginTop: "18px", marginBottom: "8px", textTransform: "uppercase" }}>Limite quotidienne atteinte</div>
-          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "18px", fontWeight: "700", color: "#f0ede8", lineHeight: "1.3" }}>Vous avez lu vos {FREE_LIMIT} histoires gratuites aujourd'hui</h2>
-        </div>
-        <div style={{ padding: "20px 26px" }}>
-          {!showStudent ? (
-            <>
-              {[{ label: "Mensuel", price: "4,99€", sub: "par mois", hi: false }, { label: "Annuel", price: "49€", sub: "par an · −18%", hi: true }].map(({ label, price, sub, hi }) => (
-                <button key={label} onClick={onPremium} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "14px 16px", marginBottom: "8px", border: `1.5px solid ${hi ? "#e74c3c" : "#222"}`, background: hi ? "#1c0808" : "transparent", cursor: "pointer", borderRadius: "10px" }}>
-                  <span style={{ fontFamily: "'Playfair Display', serif", fontSize: "15px", fontWeight: "700", color: "#f0ede8" }}>{label}</span>
-                  <div style={{ textAlign: "right" }}><div style={{ fontFamily: "'Playfair Display', serif", fontSize: "17px", fontWeight: "700", color: hi ? "#e74c3c" : "#f0ede8" }}>{price}</div><div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#444" }}>{sub}</div></div>
-                </button>
-              ))}
-              <button onClick={() => setShowStudent(true)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "12px 16px", marginBottom: "12px", border: "1px dashed #1e8449", background: "#0a1a0a", cursor: "pointer", borderRadius: "10px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}><span>🎓</span><div style={{ textAlign: "left" }}><div style={{ fontFamily: "'Playfair Display', serif", fontSize: "14px", fontWeight: "700", color: "#f0ede8" }}>Tarif étudiant</div><div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#1e8449" }}>Vérification par email universitaire</div></div></div>
-                <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "17px", fontWeight: "700", color: "#1e8449" }}>1,99€<span style={{ fontSize: "11px", color: "#555", fontWeight: "400" }}>/mois</span></div>
-              </button>
-              <button onClick={onClose} style={{ width: "100%", padding: "10px", background: "transparent", border: "none", cursor: "pointer", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#2a2a2a" }}>Revenir demain</button>
-            </>
-          ) : done ? (
-            <div style={{ textAlign: "center", padding: "20px 0" }}>
-              <div style={{ fontSize: "28px", marginBottom: "12px" }}>📧</div>
-              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "17px", fontWeight: "700", color: "#f0ede8", marginBottom: "8px" }}>Vérification envoyée</div>
-              <button onClick={onPremium} style={{ width: "100%", padding: "12px", background: "#1e8449", color: "white", border: "none", borderRadius: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer", marginTop: "16px" }}>Accéder maintenant</button>
-            </div>
-          ) : (
-            <div>
-              <button onClick={() => setShowStudent(false)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", marginBottom: "14px", padding: 0 }}>← Retour</button>
-              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "16px", fontWeight: "700", color: "#f0ede8", marginBottom: "6px" }}>Tarif étudiant — 1,99€/mois</div>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="prenom.nom@univ-paris.fr" style={{ width: "100%", padding: "12px 14px", border: "1px solid #222", background: "#0f0f0f", fontFamily: "'Source Serif 4', serif", fontSize: "14px", color: "#f0ede8", borderRadius: "8px", outline: "none", marginBottom: "10px" }} />
-              <button onClick={() => email.includes("@") && setDone(true)} style={{ width: "100%", padding: "12px", background: "#1e8449", color: "white", border: "none", borderRadius: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer", opacity: email.includes("@") ? 1 : 0.4 }}>Vérifier mon statut étudiant</button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function SourcesTab() {
   const [section, setSection] = useState("sources");
   const [filter, setFilter] = useState("all");
-  const [, forceUpdate] = useState(0);
   const filteredSources = filter === "all" ? SOURCES : SOURCES.filter(s => filter === "gauche" ? s.orientationScore <= 1 : filter === "centre" ? s.orientationScore > 1 && s.orientationScore < 4 : s.orientationScore >= 4);
   return (
     <div style={{ paddingBottom: "80px" }}>
@@ -338,9 +525,7 @@ function SourcesTab() {
         <>
           <div style={{ display: "flex", gap: "6px", marginBottom: "12px" }}>
             {["all", "gauche", "centre", "droite"].map(f => (
-              <button key={f} onClick={() => setFilter(f)} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", padding: "5px 12px", border: "1px solid", borderColor: filter === f ? "#e74c3c" : "#1f1f1f", background: filter === f ? "#1c0808" : "#161616", color: filter === f ? "#e74c3c" : "#3a3a3a", cursor: "pointer", borderRadius: "20px" }}>
-                {f === "all" ? "Tous" : f}
-              </button>
+              <button key={f} onClick={() => setFilter(f)} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", padding: "5px 12px", border: "1px solid", borderColor: filter === f ? "#e74c3c" : "#1f1f1f", background: filter === f ? "#1c0808" : "#161616", color: filter === f ? "#e74c3c" : "#3a3a3a", cursor: "pointer", borderRadius: "20px" }}>{f === "all" ? "Tous" : f}</button>
             ))}
           </div>
           {filteredSources.map(src => (
@@ -422,21 +607,16 @@ function AngleMortTab({ isPremium, onPremium }) {
           <button key={val} onClick={() => setFilter(val)} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", padding: "5px 12px", border: `1px solid ${filter === val ? color : "#1f1f1f"}`, background: filter === val ? `${color}18` : "#161616", color: filter === val ? color : "#3a3a3a", cursor: "pointer", borderRadius: "20px", transition: "all 0.15s" }}>{label}</button>
         ))}
       </div>
-      {!isPremium && (
-        <div style={{ padding: "14px 16px", background: "#1c0808", border: "1px solid #3d1010", borderRadius: "12px", marginBottom: "14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
-          <div><div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#e74c3c", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>Fonctionnalité Premium</div><p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#666", margin: 0 }}>Accédez aux angles morts complets.</p></div>
-          <button onClick={onPremium} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.08em", background: "#e74c3c", color: "white", border: "none", padding: "8px 14px", borderRadius: "6px", cursor: "pointer", whiteSpace: "nowrap" }}>Débloquer</button>
-        </div>
-      )}
+      {!isPremium && <div style={{ padding: "14px 16px", background: "#1c0808", border: "1px solid #3d1010", borderRadius: "12px", marginBottom: "14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}><div><div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#e74c3c", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>Fonctionnalité Premium</div><p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#666", margin: 0 }}>Accédez aux angles morts complets.</p></div><button onClick={onPremium} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", letterSpacing: "0.08em", background: "#e74c3c", color: "white", border: "none", padding: "8px 14px", borderRadius: "6px", cursor: "pointer", whiteSpace: "nowrap" }}>Débloquer</button></div>}
       {loading && <div style={{ width: "22px", height: "22px", border: "2px solid #1f1f1f", borderTopColor: "#e74c3c", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "40px auto" }} />}
-      {!loading && filtered.length === 0 && <div style={{ textAlign: "center", padding: "40px 20px", background: "#161616", borderRadius: "12px", border: "1px solid #1f1f1f" }}><div style={{ fontSize: "24px", marginBottom: "8px" }}>✅</div><div style={{ fontFamily: "'Playfair Display', serif", fontSize: "16px", color: "#444" }}>Aucun angle mort détecté pour le moment</div></div>}
+      {!loading && filtered.length === 0 && <div style={{ textAlign: "center", padding: "40px 20px", background: "#161616", borderRadius: "12px", border: "1px solid #1f1f1f" }}><div style={{ fontSize: "24px", marginBottom: "8px" }}>✅</div><div style={{ fontFamily: "'Playfair Display', serif", fontSize: "16px", color: "#444" }}>Aucun angle mort détecté</div></div>}
       {!loading && filtered.map((s, i) => <div key={s.id || i} style={{ animation: `fadeUp 0.3s ease ${i * 0.04}s both` }}><StoryCard story={s} onClick={handleClick} locked={false} onLock={() => {}} compact /></div>)}
       {selected && <StoryModal story={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }
 
-function ProfilTab({ isPremium, onPremium }) {
+function ProfilTab({ isPremium, onPremium, user, onSignOut }) {
   const [profile] = useState(getProfile());
   const follows = getFollows();
   const total = profile.gauche + profile.centre + profile.droite;
@@ -449,11 +629,23 @@ function ProfilTab({ isPremium, onPremium }) {
   const followedPols = POLITICIANS.filter(p => follows.politicians.includes(p.id));
   return (
     <div style={{ paddingBottom: "80px" }}>
-      <div style={{ background: "#161616", border: "1px solid #1f1f1f", borderRadius: "14px", padding: "22px", marginBottom: "12px", textAlign: "center" }}>
-        <div style={{ width: "52px", height: "52px", borderRadius: "50%", background: "#1f1f1f", border: "1px solid #252525", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px", fontSize: "20px" }}>👤</div>
-        <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "16px", fontWeight: "700", color: "#f0ede8", marginBottom: "3px" }}>Mon Profil</div>
-        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: isPremium ? "#1e8449" : "#333", letterSpacing: "0.1em" }}>{isPremium ? "● COMPTE PREMIUM" : "Compte gratuit"}</div>
+      <div style={{ background: "#161616", border: "1px solid #1f1f1f", borderRadius: "14px", padding: "22px", marginBottom: "12px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+          <div style={{ width: "52px", height: "52px", borderRadius: "50%", background: "#e74c3c22", border: "1px solid #e74c3c33", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px", flexShrink: 0 }}>
+            {user ? user.email?.[0]?.toUpperCase() || "👤" : "👤"}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "16px", fontWeight: "700", color: "#f0ede8", marginBottom: "3px" }}>
+              {user ? user.email : "Visiteur"}
+            </div>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: isPremium ? "#1e8449" : "#333", letterSpacing: "0.1em" }}>{isPremium ? "● COMPTE PREMIUM" : "Compte gratuit"}</div>
+          </div>
+          {user && (
+            <button onClick={onSignOut} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#333", background: "transparent", border: "1px solid #222", padding: "5px 10px", borderRadius: "6px", cursor: "pointer" }}>Déconnexion</button>
+          )}
+        </div>
       </div>
+
       {(followedSources.length > 0 || followedPols.length > 0) && (
         <div style={{ background: "#161616", border: "1px solid #1f1f1f", borderRadius: "12px", overflow: "hidden", marginBottom: "12px" }}>
           <div style={{ padding: "14px 16px", borderBottom: "1px solid #191919" }}><div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#333", letterSpacing: "0.12em", textTransform: "uppercase" }}>Vous suivez · {followedSources.length + followedPols.length}</div></div>
@@ -463,6 +655,7 @@ function ProfilTab({ isPremium, onPremium }) {
           </div>
         </div>
       )}
+
       {total > 0 && (
         <div style={{ background: "#161616", border: "1px solid #1f1f1f", borderRadius: "12px", padding: "18px", marginBottom: "12px" }}>
           <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#333", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "14px" }}>Votre spectre de lecture</div>
@@ -483,11 +676,14 @@ function ProfilTab({ isPremium, onPremium }) {
           {dominant?.missing && isPremium && <div style={{ marginTop: "10px", padding: "12px 14px", background: "#1a1200", border: "1px solid #2e2000", borderRadius: "8px" }}><div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#c8960c", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>⚠ Votre angle mort personnel</div><p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#9a7020", margin: 0 }}>Vous lisez peu de sources {dominant.missing}.</p></div>}
         </div>
       )}
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "12px" }}>
         <div style={{ background: "#161616", border: "1px solid #1f1f1f", borderRadius: "10px", padding: "14px", textAlign: "center" }}><div style={{ fontFamily: "'Playfair Display', serif", fontSize: "24px", fontWeight: "700", color: "#e74c3c", marginBottom: "3px" }}>{reads}</div><div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8px", color: "#333", letterSpacing: "0.06em" }}>AUJOURD'HUI</div></div>
         <div style={{ background: "#161616", border: "1px solid #1f1f1f", borderRadius: "10px", padding: "14px", textAlign: "center" }}><div style={{ fontFamily: "'Playfair Display', serif", fontSize: "24px", fontWeight: "700", color: "#f0ede8", marginBottom: "3px" }}>{profile.total}</div><div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8px", color: "#333", letterSpacing: "0.06em" }}>AU TOTAL</div></div>
       </div>
+
       {!isPremium && <div style={{ background: "#1c0808", border: "1px solid #3d1010", borderRadius: "12px", padding: "16px", textAlign: "center", marginBottom: "12px" }}><div style={{ fontFamily: "'Playfair Display', serif", fontSize: "15px", fontWeight: "700", color: "#f0ede8", marginBottom: "5px" }}>Débloquez votre profil complet</div><p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#555", lineHeight: "1.5", marginBottom: "12px" }}>Angle mort personnel, historique, recommandations.</p><button onClick={onPremium} style={{ width: "100%", padding: "12px", background: "#e74c3c", color: "white", border: "none", borderRadius: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer" }}>Passer à Premium</button></div>}
+
       <div style={{ background: "#0a1a0a", border: "1px dashed #1e8449", borderRadius: "12px", padding: "16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}><span>🏛️</span><div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color: "#1e8449", letterSpacing: "0.1em", textTransform: "uppercase" }}>Bientôt · Tracker Politique</div></div>
         <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#2a4a2a", lineHeight: "1.5", margin: "0 0 6px" }}>Tweets des politiciens en temps réel. Sénatoriales 2026.</p>
@@ -553,21 +749,87 @@ function FeedTab({ isPremium, onPremium }) {
       )}
       {loading && <div style={{ width: "22px", height: "22px", border: "2px solid #1f1f1f", borderTopColor: "#e74c3c", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "60px auto" }} />}
       {error && <div style={{ padding: "14px", background: "#1c0808", border: "1px solid #3d1010", borderRadius: "10px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", color: "#e74c3c" }}>{error}</div>}
-      {!loading && feedMode === "personalized" && filtered.length === 0 && <div style={{ textAlign: "center", padding: "40px 20px", background: "#161616", borderRadius: "12px", border: "1px solid #1f1f1f" }}><div style={{ fontSize: "24px", marginBottom: "8px" }}>⭐</div><div style={{ fontFamily: "'Playfair Display', serif", fontSize: "16px", color: "#444", marginBottom: "6px" }}>Aucune histoire de vos sources suivies</div><p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#2a2a2a" }}>Allez dans Sources pour en suivre d'autres.</p></div>}
+      {!loading && feedMode === "personalized" && filtered.length === 0 && <div style={{ textAlign: "center", padding: "40px 20px", background: "#161616", borderRadius: "12px", border: "1px solid #1f1f1f" }}><div style={{ fontSize: "24px", marginBottom: "8px" }}>⭐</div><div style={{ fontFamily: "'Playfair Display', serif", fontSize: "16px", color: "#444", marginBottom: "6px" }}>Aucune histoire de vos sources suivies</div><p style={{ fontFamily: "'Source Serif 4', serif", fontSize: "13px", color: "#2a2a2a" }}>Allez dans Sources pour en suivre.</p></div>}
       {!loading && breaking.length > 0 && <div style={{ marginBottom: "16px" }}><div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "10px" }}><span style={{ width: 6, height: 6, borderRadius: "50%", background: "#e74c3c", display: "inline-block" }} /><span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#e74c3c" }}>Breaking News</span></div>{breaking.map((s, i) => <StoryCard key={s.id || i} story={s} onClick={handleClick} locked={!isPremium && reads >= FREE_LIMIT} onLock={() => setShowPaywall(true)} />)}<div style={{ height: "1px", background: "#191919", margin: "14px 0" }} /></div>}
       {!loading && !error && regular.map((s, i) => <div key={s.id || i} style={{ animation: `fadeUp 0.3s ease ${Math.min(i, 8) * 0.035}s both` }}><StoryCard story={s} onClick={handleClick} locked={!isPremium && reads + i >= FREE_LIMIT} onLock={() => setShowPaywall(true)} /></div>)}
       {!loading && filtered.length === 0 && search && <div style={{ textAlign: "center", padding: "50px 20px", fontFamily: "'Source Serif 4', serif", fontSize: "15px", color: "#2a2a2a" }}>Aucun résultat pour «{search}»</div>}
       {selected && <StoryModal story={selected} onClose={() => setSelected(null)} />}
-      {showPaywall && <PaywallModal onClose={() => setShowPaywall(false)} onPremium={() => { onPremium(); setShowPaywall(false); }} />}
+      {showPaywall && <PaywallModal onClose={() => setShowPaywall(false)} user={user} />}
     </div>
   );
 }
 
+// ── Main App ──────────────────────────────────────────────────────────────────
+
 export default function MédiaVue() {
-  const [tab, setTab] = useState("news");
+  const [user, setUser] = useState(undefined); // undefined = loading, null = guest, object = logged in
   const [isPremium, setIsPremium] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
-  const navItems = [{ id: "news", icon: "📰", label: "Actualités" }, { id: "blindspot", icon: "⚠️", label: "Angles morts" }, { id: "sources", icon: "📋", label: "Sources" }, { id: "profile", icon: "👤", label: "Mon Profil" }];
+  const [tab, setTab] = useState("news");
+
+  useEffect(() => {
+    // Handle payment success redirect
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("payment") === "success") {
+      window.history.replaceState({}, "", "/");
+      // Premium will be loaded from Supabase after webhook fires
+    }
+    // Check existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user || null);
+      if (session?.user) loadPremiumStatus(session.user.id);
+    });
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+      if (session?.user) loadPremiumStatus(session.user.id);
+      else setIsPremium(false);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const loadPremiumStatus = async (userId) => {
+    try {
+      const { data } = await supabase.from("profiles").select("is_premium").eq("id", userId).single();
+      if (data?.is_premium) setIsPremium(true);
+    } catch {}
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setIsPremium(false);
+  };
+
+  const navItems = [
+    { id: "news", icon: "📰", label: "Actualités" },
+    { id: "blindspot", icon: "⚠️", label: "Angles morts" },
+    { id: "sources", icon: "📋", label: "Sources" },
+    { id: "profile", icon: "👤", label: "Mon Profil" },
+  ];
+
+  // Loading state
+  if (user === undefined) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#0a0a0a", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "32px", fontWeight: "900", color: "white", letterSpacing: "-0.03em", marginBottom: "24px" }}>Média<span style={{ color: "#e74c3c" }}>Vue</span></div>
+          <div style={{ width: "22px", height: "22px", border: "2px solid #1f1f1f", borderTopColor: "#e74c3c", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto" }} />
+        </div>
+      </div>
+    );
+  }
+
+  // Auth screen — show if no user (but allow guest)
+  if (user === null) {
+    return (
+      <>
+        <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;600&display=swap');*{box-sizing:border-box;margin:0;padding:0;}body{background:#0a0a0a;}@keyframes spin{to{transform:rotate(360deg)}}input::placeholder{color:#2a2a2a;}`}</style>
+        <AuthScreen onAuth={(u) => setUser(u || "guest")} />
+      </>
+    );
+  }
+
   return (
     <>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;600&display=swap');*{box-sizing:border-box;margin:0;padding:0;}body{background:#0f0f0f;}@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}@keyframes spin{to{transform:rotate(360deg)}}input::placeholder{color:#2a2a2a;}::-webkit-scrollbar{width:3px;height:0;}::-webkit-scrollbar-thumb{background:#1f1f1f;}`}</style>
@@ -585,7 +847,7 @@ export default function MédiaVue() {
           {tab === "news" && <FeedTab isPremium={isPremium} onPremium={() => setShowPaywall(true)} />}
           {tab === "blindspot" && <AngleMortTab isPremium={isPremium} onPremium={() => setShowPaywall(true)} />}
           {tab === "sources" && <SourcesTab />}
-          {tab === "profile" && <ProfilTab isPremium={isPremium} onPremium={() => setShowPaywall(true)} />}
+          {tab === "profile" && <ProfilTab isPremium={isPremium} onPremium={() => setShowPaywall(true)} user={user === "guest" ? null : user} onSignOut={handleSignOut} />}
         </div>
         <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "480px", background: "#0a0a0a", borderTop: "1px solid #161616", display: "flex", zIndex: 200, paddingBottom: "env(safe-area-inset-bottom, 5px)" }}>
           {navItems.map(({ id, icon, label }) => (
@@ -597,7 +859,7 @@ export default function MédiaVue() {
           ))}
         </nav>
       </div>
-      {showPaywall && <PaywallModal onClose={() => setShowPaywall(false)} onPremium={() => { setIsPremium(true); setShowPaywall(false); }} />}
+      {showPaywall && <PaywallModal onClose={() => setShowPaywall(false)} user={user === "guest" ? null : user} />}
     </>
   );
 }
