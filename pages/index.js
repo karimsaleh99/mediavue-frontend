@@ -61,7 +61,34 @@ async function signIn(email, password) {
 }
 
 async function signInWithGoogle() {
-  window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${window.location.origin}`;
+  const redirectTo = window.location.origin + window.location.pathname;
+  window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirectTo)}`;
+}
+
+// Parse session from URL hash after OAuth redirect
+function parseSessionFromUrl() {
+  try {
+    if (typeof window === "undefined") return null;
+    const hash = window.location.hash;
+    if (!hash) return null;
+    const params = new URLSearchParams(hash.replace("#", ""));
+    const access_token = params.get("access_token");
+    const refresh_token = params.get("refresh_token");
+    if (!access_token) return null;
+    // Clean URL
+    window.history.replaceState({}, "", window.location.pathname);
+    return { access_token, refresh_token, user: {} };
+  } catch { return null; }
+}
+
+// Get user info from access token
+async function getUser(accessToken) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { "apikey": SUPABASE_ANON, "Authorization": `Bearer ${accessToken}` }
+    });
+    return res.json();
+  } catch { return null; }
 }
 
 async function signOut(accessToken) {
@@ -1082,9 +1109,28 @@ function MédiaVueApp() {
   useEffect(() => {
     const savedTheme = localStorage.getItem(THEME_KEY);
     if (savedTheme !== null) setDark(savedTheme === "dark");
+
+    // Check if returning from Google OAuth (session in URL hash)
+    const urlSession = parseSessionFromUrl();
+    if (urlSession?.access_token) {
+      getUser(urlSession.access_token).then(user => {
+        const fullSession = { ...urlSession, user };
+        storeSession(fullSession);
+        setSession(fullSession);
+        setShowAuth(false);
+        setAuthChecked(true);
+      });
+      return;
+    }
+
+    // Check stored session
     const stored = getStoredSession();
-    if (stored?.access_token) { setSession(stored); setShowAuth(false); }
-    else setShowAuth(true);
+    if (stored?.access_token) {
+      setSession(stored);
+      setShowAuth(false);
+    } else {
+      setShowAuth(true);
+    }
     setAuthChecked(true);
   }, []);
 
