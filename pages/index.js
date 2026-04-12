@@ -276,7 +276,9 @@ function PaywallModal({onClose, onPremium}) {
 
 // Get best available image from story articles
 function getStoryImage(story) {
-  return story?.articles?.find(a => a.image_url)?.image_url || null;
+  return story?.articles?.find(a => a.imageUrl || a.image_url)?.imageUrl
+    || story?.articles?.find(a => a.imageUrl || a.image_url)?.image_url
+    || null;
 }
 
 // ── Source Name Pill ──────────────────────────────────────────────────────────
