@@ -292,6 +292,26 @@ function PaywallModal({onClose, onPremium}) {
   );
 }
 
+// ── Custom hook: fetch unique image per story ────────────────────────────────
+function useStoryImage(story) {
+  const articleImg = story?.articles?.find(a => a.image_url)?.image_url;
+  const [img, setImg] = useState(articleImg || getFallbackImage(story?.category));
+  useEffect(() => {
+    if (articleImg) { setImg(articleImg); return; }
+    if (!story?.title) return;
+    // Clean query — remove special chars, keep only words
+    const clean = story.title
+      .replace(/[«»:;!?'"()]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(" ")
+      .slice(0, 3)
+      .join(" ");
+    fetchUnsplashImage(clean).then(url => { if (url) setImg(url); });
+  }, [story?.id]);
+  return img;
+}
+
 // ── Source Name Pill ──────────────────────────────────────────────────────────
 function SrcName({id, size="sm"}) {
   const s = getSource(id);
@@ -309,17 +329,9 @@ function SrcName({id, size="sm"}) {
 function StoryCard({story, onClick, locked, onLock}) {
   const cov = story.coverageByOrientation||story.coverage_by_orientation||{};
   const srcIds = story.sourceIds||story.source_ids||[];
-  const articleImg = story.articles?.find(a=>a.image_url)?.image_url;
-  const [img, setImg] = useState(articleImg || getFallbackImage(story.category));
+  const img = useStoryImage(story);
   const breaking = isBreaking(story);
   const catIcon = CAT_ICONS[story.category]||CAT_ICONS["default"];
-
-  useEffect(()=>{
-    if (!articleImg && story.title) {
-      const keywords = story.title.split(" ").slice(0,4).join(" ");
-      fetchUnsplashImage(keywords).then(url => setImg(url));
-    }
-  }, [story.id]);
 
   return (
     <div onClick={locked?onLock:()=>onClick(story)}
@@ -391,16 +403,8 @@ function StoryModal({story, onClose}) {
   if (!story) return null;
   const articles = story.articles||[];
   const cov = story.coverageByOrientation||story.coverage_by_orientation||{};
-  const articleImg = articles.find(a=>a.image_url)?.image_url;
-  const [img, setImg] = useState(articleImg || getFallbackImage(story.category));
+  const img = useStoryImage(story);
   const catIcon = CAT_ICONS[story.category]||CAT_ICONS["default"];
-
-  useEffect(()=>{
-    if (!articleImg && story.title) {
-      const keywords = story.title.split(" ").slice(0,4).join(" ");
-      fetchUnsplashImage(keywords).then(url => setImg(url));
-    }
-  }, [story.id]);
 
   const gauche = articles.filter(a=>(getSource(a.sourceId||a.source_id)?.orientationScore??3)<=1);
   const centre = articles.filter(a=>{const s=getSource(a.sourceId||a.source_id)?.orientationScore??3;return s>1&&s<4;});
@@ -502,18 +506,9 @@ function StoryModal({story, onClose}) {
 
 // ── Briefing Story Item ───────────────────────────────────────────────────────
 function BriefingStoryItem({story, onClick, index, total}) {
+  const img = useStoryImage(story);
   const cov = story.coverageByOrientation||story.coverage_by_orientation||{};
-  const articleImg = story.articles?.find(a=>a.image_url)?.image_url;
-  const [img, setImg] = useState(articleImg || getFallbackImage(story.category));
   const catIcon = CAT_ICONS[story.category]||"📰";
-
-  useEffect(()=>{
-    if (!articleImg && story.title) {
-      const keywords = story.title.split(" ").slice(0,4).join(" ");
-      fetchUnsplashImage(keywords).then(url => setImg(url));
-    }
-  }, [story.id]);
-
   return (
     <div onClick={()=>onClick(story)} style={{display:"flex",gap:"11px",alignItems:"center",paddingBottom:"10px",borderBottom:index<total-1?"1px solid #1a1a1a":"none",marginBottom:"10px",cursor:"pointer"}}
       onMouseEnter={e=>e.currentTarget.style.opacity="0.8"}
@@ -534,8 +529,6 @@ function BriefingStoryItem({story, onClick, index, total}) {
     </div>
   );
 }
-
-// ── Daily Briefing ────────────────────────────────────────────────────────────
 function DailyBriefing({stories, onStoryClick, isPremium, onPremium}) {
   const today = new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
   const topStories = stories.slice(0,3);
