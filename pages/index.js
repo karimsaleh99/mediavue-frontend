@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 
 const API_URL = "https://mediavue-backend-production.up.railway.app";
 const FREE_LIMIT = 5;
@@ -294,20 +295,22 @@ function PaywallModal({onClose, onPremium}) {
 
 // ── Custom hook: fetch unique image per story ────────────────────────────────
 function useStoryImage(story) {
-  const articleImg = story?.articles?.find(a => a.image_url)?.image_url;
-  const [img, setImg] = useState(articleImg || getFallbackImage(story?.category));
+  // Always start with static fallback to avoid SSR/client mismatch
+  const [img, setImg] = useState(getFallbackImage(story?.category));
   useEffect(() => {
+    if (!story) return;
+    const articleImg = story.articles?.find(a => a.image_url)?.image_url;
     if (articleImg) { setImg(articleImg); return; }
-    if (!story?.title) return;
-    // Clean query — remove special chars, keep only words
+    if (!story.title) return;
     const clean = story.title
-      .replace(/[«»:;!?'"()]/g, " ")
+      .replace(/[«»:;!?'"()[\]]/g, " ")
       .replace(/\s+/g, " ")
       .trim()
       .split(" ")
+      .filter(w => w.length > 3)
       .slice(0, 3)
       .join(" ");
-    fetchUnsplashImage(clean).then(url => { if (url) setImg(url); });
+    if (clean) fetchUnsplashImage(clean).then(url => { if (url) setImg(url); });
   }, [story?.id]);
   return img;
 }
@@ -887,7 +890,7 @@ function FeedTab({isPremium, onPremium}) {
 }
 
 // ── Main App ──────────────────────────────────────────────────────────────────
-export default function MédiaVue() {
+function MédiaVueApp() {
   const [tab, setTab] = useState("news");
   const [isPremium, setIsPremium] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
@@ -942,3 +945,5 @@ export default function MédiaVue() {
     </>
   );
 }
+
+export default dynamic(() => Promise.resolve(MédiaVueApp), { ssr: false });
