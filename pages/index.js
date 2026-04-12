@@ -6,6 +6,82 @@ const FREE_LIMIT = 5;
 const STORAGE_KEY = "mv_reads";
 const RESET_KEY = "mv_reset";
 const PROFILE_KEY = "mv_profile";
+const THEME_KEY = "mv_theme";
+
+// Stripe config
+const STRIPE_PK = "pk_test_51TIeliCNh46FhHW7NcuzCh7D8YE0nIvu8ptqVjHNgYkJg9j9utCvuxTTlcB4C3xGivRfEnWuwmkFSurQ6HdmoVfV00vP1rCMG3";
+
+// Stripe checkout — redirects to Stripe hosted page
+// priceId comes from your Stripe dashboard (price_xxx)
+async function openStripeCheckout(priceId, email) {
+  try {
+    const res = await fetch(`${API_URL}/api/stripe/checkout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ priceId, email, successUrl: window.location.href + "?premium=1", cancelUrl: window.location.href }),
+    });
+    const data = await res.json();
+    if (data.url) window.location.href = data.url;
+    else console.error("Stripe error", data);
+  } catch (e) {
+    console.error("Stripe checkout error", e);
+  }
+}
+
+// Supabase config
+const SUPABASE_URL = "https://ffkksnejsgxeglqhjujy.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZma2tzbmVqc2d4ZWdscWhqdWp5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMjEzNjEsImV4cCI6MjA5MDg5NzM2MX0.0DoVlYkw12jAW1gbMYv5dMu1QE5U9af47H3PQtySmPc";
+
+// Supabase auth helpers
+async function supabaseRequest(path, options = {}) {
+  const res = await fetch(`${SUPABASE_URL}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": SUPABASE_ANON,
+      "Authorization": `Bearer ${SUPABASE_ANON}`,
+      ...(options.headers || {}),
+    },
+  });
+  return res.json();
+}
+
+async function signUp(email, password) {
+  return supabaseRequest("/auth/v1/signup", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+async function signIn(email, password) {
+  return supabaseRequest("/auth/v1/token?grant_type=password", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+async function signInWithGoogle() {
+  window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${window.location.origin}`;
+}
+
+async function signOut(accessToken) {
+  return supabaseRequest("/auth/v1/logout", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${accessToken}` },
+  });
+}
+
+function getStoredSession() {
+  try { return JSON.parse(localStorage.getItem("mv_session") || "null"); } catch { return null; }
+}
+
+function storeSession(session) {
+  try { localStorage.setItem("mv_session", JSON.stringify(session)); } catch {}
+}
+
+function clearSession() {
+  try { localStorage.removeItem("mv_session"); } catch {}
+}
 
 // Category gradient fallbacks — no external images needed
 const CAT_GRADIENTS = {
@@ -215,10 +291,33 @@ function DonutChart({gauche, centre, droite}) {
 }
 
 // ── Paywall Modal ─────────────────────────────────────────────────────────────
-function PaywallModal({onClose, onPremium}) {
+function PaywallModal({onClose, onPremium, session}) {
   const [showStudent, setShowStudent] = useState(false);
   const [studentEmail, setStudentEmail] = useState("");
   const [studentSubmitted, setStudentSubmitted] = useState(false);
+  const [loadingPlan, setLoadingPlan] = useState(null);
+
+  // Replace these with your actual Stripe Price IDs once created
+  const PRICE_MONTHLY = "price_1TIetmCNh46FhHW7NnpwHfzE";
+  const PRICE_ANNUAL  = "price_1TIeuNCNh46FhHW76z9lKZTY";
+  const PRICE_STUDENT = "price_1TIevCCNh46FhHW7V8LAtkno";
+
+  const handlePlan = async (priceId, planName) => {
+    // If price IDs not set yet, just unlock locally
+    if (priceId.includes("HERE")) { onPremium(); return; }
+    setLoadingPlan(planName);
+    const email = session?.user?.email || "";
+    await openStripeCheckout(priceId, email);
+    setLoadingPlan(null);
+  };
+
+  // Check if returning from successful Stripe checkout
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.search.includes("premium=1")) {
+      onPremium();
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",backdropFilter:"blur(8px)"}}>
       <div style={{background:"#141414",maxWidth:"400px",width:"100%",borderRadius:"20px",border:"1px solid #1f1f1f",overflow:"hidden"}}>
@@ -229,33 +328,39 @@ function PaywallModal({onClose, onPremium}) {
         </div>
         <div style={{padding:"20px 26px"}}>
           {!showStudent ? (<>
-            {[{label:"Mensuel",price:"4,99€",sub:"par mois",hi:false},{label:"Annuel",price:"49€",sub:"par an · économisez 18%",hi:true}].map(({label,price,sub,hi})=>(
-              <button key={label} onClick={onPremium} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"14px 16px",marginBottom:"8px",border:`1.5px solid ${hi?"#e74c3c":"#222"}`,background:hi?"#1c0808":"transparent",cursor:"pointer",borderRadius:"10px"}}>
-                <span style={{fontFamily:"'Playfair Display',serif",fontSize:"15px",fontWeight:"700",color:"#f0ede8"}}>{label}</span>
+            {[
+              {label:"Mensuel", price:"4,99€", sub:"par mois", hi:false, priceId:PRICE_MONTHLY},
+              {label:"Annuel",  price:"49€",   sub:"par an · économisez 18%", hi:true, priceId:PRICE_ANNUAL}
+            ].map(({label,price,sub,hi,priceId})=>(
+              <button key={label} onClick={()=>handlePlan(priceId,label)} disabled={loadingPlan===label}
+                style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"14px 16px",marginBottom:"8px",border:`1.5px solid ${hi?"#e74c3c":"#222"}`,background:hi?"#1c0808":"transparent",cursor:"pointer",borderRadius:"10px",opacity:loadingPlan===label?0.7:1}}>
+                <span style={{fontFamily:"'Playfair Display',serif",fontSize:"15px",fontWeight:"700",color:"#f0ede8"}}>{loadingPlan===label?"Chargement...":label}</span>
                 <div style={{textAlign:"right"}}>
                   <div style={{fontFamily:"'Playfair Display',serif",fontSize:"17px",fontWeight:"700",color:hi?"#e74c3c":"#f0ede8"}}>{price}</div>
                   <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#444"}}>{sub}</div>
                 </div>
               </button>
             ))}
-            <button onClick={()=>setShowStudent(true)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"12px 16px",marginBottom:"12px",border:"1px dashed #1e8449",background:"#0a1a0a",cursor:"pointer",borderRadius:"10px"}}>
-              <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
-                <span style={{fontSize:"14px"}}>🎓</span>
-                <div style={{textAlign:"left"}}>
-                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:"14px",fontWeight:"700",color:"#f0ede8"}}>Tarif étudiant</div>
-                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#1e8449"}}>Vérification par email universitaire</div>
+              <button onClick={()=>setShowStudent(true)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"12px 16px",marginBottom:"12px",border:"1px dashed #1e8449",background:"#0a1a0a",cursor:"pointer",borderRadius:"10px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                  <span style={{fontSize:"14px"}}>🎓</span>
+                  <div style={{textAlign:"left"}}>
+                    <div style={{fontFamily:"'Playfair Display',serif",fontSize:"14px",fontWeight:"700",color:"#f0ede8"}}>Tarif étudiant</div>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#1e8449"}}>Vérification par email universitaire</div>
+                  </div>
                 </div>
-              </div>
-              <div style={{fontFamily:"'Playfair Display',serif",fontSize:"17px",fontWeight:"700",color:"#1e8449"}}>1,99€<span style={{fontSize:"11px",color:"#555",fontWeight:"400"}}>/mois</span></div>
-            </button>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:"17px",fontWeight:"700",color:"#1e8449"}}>1,99€<span style={{fontSize:"11px",color:"#555",fontWeight:"400"}}>/mois</span></div>
+              </button>
             <button onClick={onClose} style={{width:"100%",padding:"10px",background:"transparent",border:"none",cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",color:"#2a2a2a"}}>Revenir demain</button>
             <p style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#222",textAlign:"center",marginTop:"10px",letterSpacing:"0.06em"}}>AUCUNE PUBLICITÉ · 100% INDÉPENDANT</p>
           </>) : studentSubmitted ? (
             <div style={{textAlign:"center",padding:"20px 0"}}>
               <div style={{fontSize:"28px",marginBottom:"12px"}}>📧</div>
-              <div style={{fontFamily:"'Playfair Display',serif",fontSize:"17px",fontWeight:"700",color:"#f0ede8",marginBottom:"8px"}}>Vérification envoyée</div>
-              <p style={{fontFamily:"'Source Serif 4',serif",fontSize:"13px",color:"#555",lineHeight:"1.5",marginBottom:"16px"}}>Vérifiez votre boîte mail. Accès activé sous 24h.</p>
-              <button onClick={onPremium} style={{width:"100%",padding:"12px",background:"#1e8449",color:"white",border:"none",borderRadius:"8px",fontFamily:"'IBM Plex Mono',monospace",fontSize:"11px",letterSpacing:"0.1em",textTransform:"uppercase",cursor:"pointer"}}>Accéder maintenant</button>
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:"17px",fontWeight:"700",color:"#f0ede8",marginBottom:"8px"}}>Email vérifié !</div>
+              <p style={{fontFamily:"'Source Serif 4',serif",fontSize:"13px",color:"#555",lineHeight:"1.5",marginBottom:"16px"}}>Profitez du tarif étudiant à 1,99€/mois.</p>
+              <button onClick={()=>handlePlan(PRICE_STUDENT,"Étudiant")} style={{width:"100%",padding:"12px",background:"#1e8449",color:"white",border:"none",borderRadius:"8px",fontFamily:"'IBM Plex Mono',monospace",fontSize:"11px",letterSpacing:"0.1em",textTransform:"uppercase",cursor:"pointer"}}>
+                {loadingPlan==="Étudiant"?"Chargement...":"Activer le tarif étudiant"}
+              </button>
             </div>
           ) : (
             <div>
@@ -862,60 +967,225 @@ function FeedTab({isPremium, onPremium}) {
 }
 
 // ── Main App ──────────────────────────────────────────────────────────────────
+// ── Auth Screen ───────────────────────────────────────────────────────────────
+function AuthScreen({onAuth, dark}) {
+  const [mode, setMode] = useState("login"); // login | signup | forgot
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const bg = dark ? "#0f0f0f" : "#f8f6f1";
+  const card = dark ? "#161616" : "#ffffff";
+  const border = dark ? "#1f1f1f" : "#e8e4dc";
+  const text = dark ? "#f0ede8" : "#1a1a1a";
+  const muted = dark ? "#444" : "#888";
+  const inputBg = dark ? "#0f0f0f" : "#f0ede8";
+
+  const handleSubmit = async () => {
+    if (!email || (!password && mode !== "forgot")) return;
+    setLoading(true); setError(""); setSuccess("");
+    try {
+      if (mode === "login") {
+        const res = await signIn(email, password);
+        if (res.access_token) { storeSession(res); onAuth(res); }
+        else setError(res.msg || res.error_description || "Email ou mot de passe incorrect");
+      } else if (mode === "signup") {
+        const res = await signUp(email, password);
+        if (res.id || res.user?.id) setSuccess("Compte créé ! Vérifiez votre email pour confirmer.");
+        else setError(res.msg || res.error_description || "Erreur lors de l'inscription");
+      } else {
+        setSuccess("Si ce compte existe, vous recevrez un email de réinitialisation.");
+      }
+    } catch { setError("Erreur de connexion. Réessayez."); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{minHeight:"100vh",background:bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px"}}>
+      <div style={{marginBottom:"36px",textAlign:"center"}}>
+        <span style={{fontFamily:"'Playfair Display',serif",fontSize:"32px",fontWeight:"900",color:text,letterSpacing:"-0.03em"}}>
+          Média<span style={{color:"#e74c3c"}}>Vue</span>
+        </span>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",color:muted,letterSpacing:"0.1em",marginTop:"6px"}}>L'INFO VUE DE TOUS LES ANGLES</div>
+      </div>
+
+      <div style={{background:card,border:`1px solid ${border}`,borderRadius:"18px",padding:"28px 26px",maxWidth:"380px",width:"100%"}}>
+        <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:"20px",fontWeight:"700",color:text,marginBottom:"6px"}}>
+          {mode==="login"?"Connexion":mode==="signup"?"Créer un compte":"Mot de passe oublié"}
+        </h2>
+        <p style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",color:muted,marginBottom:"22px"}}>
+          {mode==="login"?"Bon retour sur MédiaVue":mode==="signup"?"Rejoignez la communauté":"Entrez votre email pour réinitialiser"}
+        </p>
+
+        {/* Google OAuth */}
+        {mode !== "forgot" && (
+          <button onClick={signInWithGoogle} style={{width:"100%",padding:"12px",background:dark?"#1f1f1f":"#f0ede8",border:`1px solid ${border}`,borderRadius:"10px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:"10px",marginBottom:"16px"}}>
+            <svg width="18" height="18" viewBox="0 0 18 18"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
+            <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"11px",color:text,letterSpacing:"0.06em"}}>Continuer avec Google</span>
+          </button>
+        )}
+
+        {mode !== "forgot" && (
+          <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"16px"}}>
+            <div style={{flex:1,height:"1px",background:border}}/>
+            <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:muted}}>ou</span>
+            <div style={{flex:1,height:"1px",background:border}}/>
+          </div>
+        )}
+
+        <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="votre@email.fr"
+          style={{width:"100%",padding:"12px 14px",border:`1px solid ${border}`,background:inputBg,fontFamily:"'Source Serif 4',serif",fontSize:"14px",color:text,borderRadius:"8px",outline:"none",marginBottom:"10px"}}/>
+
+        {mode !== "forgot" && (
+          <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Mot de passe"
+            onKeyDown={e=>e.key==="Enter"&&handleSubmit()}
+            style={{width:"100%",padding:"12px 14px",border:`1px solid ${border}`,background:inputBg,fontFamily:"'Source Serif 4',serif",fontSize:"14px",color:text,borderRadius:"8px",outline:"none",marginBottom:"16px"}}/>
+        )}
+
+        {error && <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",color:"#e74c3c",marginBottom:"12px",padding:"8px 12px",background:"#1c0808",borderRadius:"6px"}}>{error}</div>}
+        {success && <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",color:"#1e8449",marginBottom:"12px",padding:"8px 12px",background:"#0a1a0a",borderRadius:"6px"}}>{success}</div>}
+
+        <button onClick={handleSubmit} disabled={loading} style={{width:"100%",padding:"13px",background:"#e74c3c",color:"white",border:"none",borderRadius:"10px",fontFamily:"'IBM Plex Mono',monospace",fontSize:"11px",letterSpacing:"0.1em",textTransform:"uppercase",cursor:"pointer",opacity:loading?0.7:1,marginBottom:"14px"}}>
+          {loading?"Chargement...":mode==="login"?"Se connecter":mode==="signup"?"Créer mon compte":"Envoyer le lien"}
+        </button>
+
+        <div style={{textAlign:"center"}}>
+          {mode==="login" && <>
+            <button onClick={()=>{setMode("forgot");setError("");setSuccess("");}} style={{background:"none",border:"none",cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:muted,display:"block",width:"100%",marginBottom:"8px"}}>Mot de passe oublié ?</button>
+            <button onClick={()=>{setMode("signup");setError("");setSuccess("");}} style={{background:"none",border:"none",cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#e74c3c"}}>Créer un compte →</button>
+          </>}
+          {mode==="signup" && <button onClick={()=>{setMode("login");setError("");setSuccess("");}} style={{background:"none",border:"none",cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:muted}}>Déjà un compte ? Se connecter</button>}
+          {mode==="forgot" && <button onClick={()=>{setMode("login");setError("");setSuccess("");}} style={{background:"none",border:"none",cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:muted}}>← Retour à la connexion</button>}
+        </div>
+      </div>
+
+      <button onClick={()=>onAuth(null)} style={{marginTop:"16px",background:"none",border:"none",cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:muted,letterSpacing:"0.06em"}}>
+        Continuer sans compte →
+      </button>
+    </div>
+  );
+}
+
+// ── Main App ──────────────────────────────────────────────────────────────────
 function MédiaVueApp() {
   const [tab, setTab] = useState("news");
   const [isPremium, setIsPremium] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
+  const [session, setSession] = useState(null);
+  const [showAuth, setShowAuth] = useState(false);
+  const [dark, setDark] = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  // Load theme + session on mount
+  useEffect(() => {
+    const savedTheme = localStorage.getItem(THEME_KEY);
+    if (savedTheme !== null) setDark(savedTheme === "dark");
+    const stored = getStoredSession();
+    if (stored?.access_token) { setSession(stored); setShowAuth(false); }
+    else setShowAuth(true);
+    setAuthChecked(true);
+  }, []);
+
+  // Apply theme to body
+  useEffect(() => {
+    document.body.style.background = dark ? "#0f0f0f" : "#f8f6f1";
+    localStorage.setItem(THEME_KEY, dark ? "dark" : "light");
+  }, [dark]);
+
+  const handleAuth = (sess) => {
+    if (sess) { setSession(sess); storeSession(sess); }
+    setShowAuth(false);
+  };
+
+  const handleSignOut = async () => {
+    if (session?.access_token) await signOut(session.access_token);
+    clearSession(); setSession(null); setShowAuth(true);
+  };
+
+  const handlePremium = () => {
+    // Stripe checkout — wire in when Stripe key is ready
+    setIsPremium(true); setShowPaywall(false);
+  };
+
+  // Theme-aware colors
+  const bg = dark ? "#0f0f0f" : "#f8f6f1";
+  const headerBg = dark ? "#0f0f0f" : "#f8f6f1";
+  const headerBorder = dark ? "#161616" : "#e8e4dc";
+  const navBg = dark ? "#0a0a0a" : "#ffffff";
+  const navBorder = dark ? "#161616" : "#e8e4dc";
+  const textPrimary = dark ? "#f0ede8" : "#1a1a1a";
+  const textMuted = dark ? "#2a2a2a" : "#aaa";
+
   const navItems = [
     {id:"news",icon:"📰",label:"Actualités"},
     {id:"blindspot",icon:"⚠️",label:"Angles morts"},
     {id:"sources",icon:"📋",label:"Sources"},
     {id:"profile",icon:"👤",label:"Mon Profil"},
   ];
+
+  if (!authChecked) return null;
+  if (showAuth) return <AuthScreen onAuth={handleAuth} dark={dark}/>;
+
   return (
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;600&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
-        body{background:#0f0f0f;}
         @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
         @keyframes spin{to{transform:rotate(360deg)}}
-        input::placeholder{color:#2a2a2a;}
+        input::placeholder{color:${dark?"#2a2a2a":"#bbb"};}
         ::-webkit-scrollbar{width:3px;height:0;}
-        ::-webkit-scrollbar-thumb{background:#1f1f1f;}
+        ::-webkit-scrollbar-thumb{background:${dark?"#1f1f1f":"#ddd"};}
       `}</style>
-      <div style={{minHeight:"100vh",background:"#0f0f0f",maxWidth:"480px",margin:"0 auto"}}>
-        <header style={{background:"#0f0f0f",borderBottom:"1px solid #161616",padding:"13px 15px 10px",position:"sticky",top:0,zIndex:100}}>
+      <div style={{minHeight:"100vh",background:bg,maxWidth:"480px",margin:"0 auto"}}>
+        <header style={{background:headerBg,borderBottom:`1px solid ${headerBorder}`,padding:"13px 15px 10px",position:"sticky",top:0,zIndex:100}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <Logo/>
+            <span style={{fontFamily:"'Playfair Display',serif",fontSize:"20px",fontWeight:"900",color:textPrimary,letterSpacing:"-0.03em"}}>
+              Média<span style={{color:"#e74c3c"}}>Vue</span>
+            </span>
             <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+              {/* Dark/Light toggle */}
+              <button onClick={()=>setDark(!dark)} style={{background:"none",border:`1px solid ${dark?"#222":"#ddd"}`,borderRadius:"20px",padding:"3px 10px",cursor:"pointer",fontSize:"13px",display:"flex",alignItems:"center",gap:"4px"}}>
+                <span>{dark?"☀️":"🌙"}</span>
+              </button>
+
+              {/* Auth button */}
+              {session
+                ? <button onClick={handleSignOut} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.06em",background:"none",color:dark?"#333":"#aaa",border:`1px solid ${dark?"#222":"#ddd"}`,padding:"4px 10px",borderRadius:"4px",cursor:"pointer"}}>Déconnexion</button>
+                : <button onClick={()=>setShowAuth(true)} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.06em",background:"none",color:dark?"#555":"#888",border:`1px solid ${dark?"#222":"#ddd"}`,padding:"4px 10px",borderRadius:"4px",cursor:"pointer"}}>Connexion</button>
+              }
+
               {isPremium
                 ?<span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#1e8449",border:"1px solid #1e8449",padding:"2px 8px",borderRadius:"10px"}}>PREMIUM</span>
                 :<button onClick={()=>setShowPaywall(true)} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.08em",background:"#e74c3c",color:"white",border:"none",padding:"4px 10px",borderRadius:"4px",cursor:"pointer"}}>Premium</button>
               }
-              <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#1f1f1f"}}>{new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long"})}</span>
             </div>
           </div>
         </header>
+
         <div style={{padding:"13px 13px 0"}}>
-          {tab==="news"&&<FeedTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)}/>}
-          {tab==="blindspot"&&<AngleMortTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)}/>}
-          {tab==="sources"&&<SourcesTab/>}
-          {tab==="profile"&&<ProfilTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)}/>}
+          {tab==="news"&&<FeedTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark}/>}
+          {tab==="blindspot"&&<AngleMortTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark}/>}
+          {tab==="sources"&&<SourcesTab dark={dark}/>}
+          {tab==="profile"&&<ProfilTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark} session={session} onSignOut={handleSignOut} onSignIn={()=>setShowAuth(true)}/>}
         </div>
-        <nav style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:"480px",background:"#0a0a0a",borderTop:"1px solid #161616",display:"flex",zIndex:200,paddingBottom:"env(safe-area-inset-bottom,5px)"}}>
+
+        <nav style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:"480px",background:navBg,borderTop:`1px solid ${navBorder}`,display:"flex",zIndex:200,paddingBottom:"env(safe-area-inset-bottom,5px)"}}>
           {navItems.map(({id,icon,label})=>(
             <button key={id} onClick={()=>setTab(id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"3px",padding:"10px 0 7px",background:"transparent",border:"none",cursor:"pointer"}}>
               <span style={{fontSize:"17px",filter:tab===id?"none":"grayscale(1)",opacity:tab===id?1:0.25,transition:"all 0.15s"}}>{icon}</span>
-              <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"8px",letterSpacing:"0.06em",color:tab===id?"#e74c3c":"#2a2a2a",textTransform:"uppercase",transition:"color 0.15s"}}>{label}</span>
+              <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"8px",letterSpacing:"0.06em",color:tab===id?"#e74c3c":textMuted,textTransform:"uppercase",transition:"color 0.15s"}}>{label}</span>
               {tab===id&&<div style={{width:"14px",height:"2px",background:"#e74c3c",borderRadius:"1px",marginTop:"1px"}}/>}
             </button>
           ))}
         </nav>
       </div>
-      {showPaywall&&<PaywallModal onClose={()=>setShowPaywall(false)} onPremium={()=>{setIsPremium(true);setShowPaywall(false);}}/>}
+      {showPaywall&&<PaywallModal onClose={()=>setShowPaywall(false)} onPremium={handlePremium} session={session}/>}
     </>
   );
 }
 
 export default dynamic(() => Promise.resolve(MédiaVueApp), { ssr: false });
+
