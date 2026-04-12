@@ -7,37 +7,18 @@ const STORAGE_KEY = "mv_reads";
 const RESET_KEY = "mv_reset";
 const PROFILE_KEY = "mv_profile";
 
-const UNSPLASH_KEY = "BacwUVvXJkFQA8Pt8qZhtMOk09UK019mKi6tBhojTvU";
-const unsplashCache = {};
-
-async function fetchUnsplashImage(query) {
-  if (unsplashCache[query]) return unsplashCache[query];
-  try {
-    const res = await fetch(`https://api.unsplash.com/photos/random?query=${encodeURIComponent(query)}&orientation=landscape&client_id=${UNSPLASH_KEY}`);
-    const data = await res.json();
-    const url = data?.urls?.regular || getFallbackStatic(query);
-    unsplashCache[query] = url;
-    return url;
-  } catch {
-    return getFallbackStatic(query);
-  }
-}
-
-const STATIC_FALLBACKS = {
-  "Politique": "https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=800&q=80",
-  "Économie": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&q=80",
-  "International": "https://images.unsplash.com/photo-1526470608268-f674ce90ebd4?w=800&q=80",
-  "Social": "https://images.unsplash.com/photo-1573497620053-ea5300f94f21?w=800&q=80",
-  "Justice": "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=800&q=80",
-  "Médias": "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&q=80",
-  "Technologie": "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&q=80",
-  "Environnement": "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&q=80",
-  "default": "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&q=80",
+// Category gradient fallbacks — no external images needed
+const CAT_GRADIENTS = {
+  "Politique":    "linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)",
+  "Économie":     "linear-gradient(135deg,#0a1628 0%,#0e2d1f 50%,#0a4f3f 100%)",
+  "International":"linear-gradient(135deg,#1a0a2e 0%,#16213e 50%,#2d1b69 100%)",
+  "Social":       "linear-gradient(135deg,#1a1200 0%,#2d1f00 50%,#3d2800 100%)",
+  "Justice":      "linear-gradient(135deg,#1a0a0a 0%,#2d1010 50%,#3d1515 100%)",
+  "Médias":       "linear-gradient(135deg,#0a1a1a 0%,#0d2626 50%,#0f3333 100%)",
+  "Technologie":  "linear-gradient(135deg,#0a0a1a 0%,#10102e 50%,#1a1a4a 100%)",
+  "Environnement":"linear-gradient(135deg,#0a1a0a 0%,#0d2010 50%,#0f3015 100%)",
+  "default":      "linear-gradient(135deg,#111 0%,#1a1a1a 50%,#222 100%)",
 };
-
-function getFallbackStatic(category) {
-  return STATIC_FALLBACKS[category] || STATIC_FALLBACKS["default"];
-}
 
 const CAT_ICONS = {
   "Politique": "🏛️", "Économie": "📈", "International": "🌍",
@@ -120,8 +101,8 @@ function updateProfile(sourceIds) {
     localStorage.setItem(PROFILE_KEY,JSON.stringify(p));
   } catch {}
 }
-function getFallbackImage(category) {
-  return STATIC_FALLBACKS[category] || STATIC_FALLBACKS["default"];
+function getCategoryGradient(category) {
+  return CAT_GRADIENTS[category] || CAT_GRADIENTS["default"];
 }
 
 // ── Logo ──────────────────────────────────────────────────────────────────────
@@ -293,26 +274,9 @@ function PaywallModal({onClose, onPremium}) {
   );
 }
 
-// ── Custom hook: fetch unique image per story ────────────────────────────────
-function useStoryImage(story) {
-  // Always start with static fallback to avoid SSR/client mismatch
-  const [img, setImg] = useState(getFallbackImage(story?.category));
-  useEffect(() => {
-    if (!story) return;
-    const articleImg = story.articles?.find(a => a.image_url)?.image_url;
-    if (articleImg) { setImg(articleImg); return; }
-    if (!story.title) return;
-    const clean = story.title
-      .replace(/[«»:;!?'"()[\]]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .split(" ")
-      .filter(w => w.length > 3)
-      .slice(0, 3)
-      .join(" ");
-    if (clean) fetchUnsplashImage(clean).then(url => { if (url) setImg(url); });
-  }, [story?.id]);
-  return img;
+// Get best available image from story articles
+function getStoryImage(story) {
+  return story?.articles?.find(a => a.image_url)?.image_url || null;
 }
 
 // ── Source Name Pill ──────────────────────────────────────────────────────────
@@ -332,9 +296,10 @@ function SrcName({id, size="sm"}) {
 function StoryCard({story, onClick, locked, onLock}) {
   const cov = story.coverageByOrientation||story.coverage_by_orientation||{};
   const srcIds = story.sourceIds||story.source_ids||[];
-  const img = useStoryImage(story);
+  const articleImg = getStoryImage(story);
   const breaking = isBreaking(story);
   const catIcon = CAT_ICONS[story.category]||CAT_ICONS["default"];
+  const gradient = getCategoryGradient(story.category);
 
   return (
     <div onClick={locked?onLock:()=>onClick(story)}
@@ -348,13 +313,15 @@ function StoryCard({story, onClick, locked, onLock}) {
         </div>
       )}
 
-      {/* Hero image — taller, with gradient overlay */}
-      <div style={{height:"190px",overflow:"hidden",position:"relative",flexShrink:0}}>
-        <img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}
-          onError={e=>{e.target.src=getFallbackImage("default");}}/>
+      {/* Hero image — article image or gradient fallback */}
+      <div style={{height:"190px",overflow:"hidden",position:"relative",flexShrink:0,background:gradient}}>
+        {articleImg && (
+          <img src={articleImg} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}
+            onError={e=>{e.target.style.display="none";}}/>
+        )}
         <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.1) 0%,rgba(22,22,22,0.95) 100%)"}}/>
         {/* Category badge over image */}
-        <div style={{position:"absolute",top:"12px",left:"12px",display:"flex",alignItems:"center",gap:"6px",background:"rgba(0,0,0,0.6)",backdropFilter:"blur(8px)",padding:"5px 10px",borderRadius:"20px",border:"1px solid rgba(255,255,255,0.08)"}}>
+        <div style={{position:"absolute",top:"12px",left:"12px",display:"flex",alignItems:"center",gap:"6px",background:"rgba(0,0,0,0.5)",backdropFilter:"blur(8px)",padding:"5px 10px",borderRadius:"20px",border:"1px solid rgba(255,255,255,0.08)"}}>
           <span style={{fontSize:"12px"}}>{catIcon}</span>
           <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"rgba(255,255,255,0.7)",letterSpacing:"0.1em",textTransform:"uppercase"}}>{story.category||"Actualité"}</span>
         </div>
@@ -363,7 +330,6 @@ function StoryCard({story, onClick, locked, onLock}) {
             <span style={{width:5,height:5,borderRadius:"50%",background:"white",display:"inline-block"}}/>BREAKING
           </div>
         )}
-        {/* Source count pill bottom right of image */}
         <div style={{position:"absolute",bottom:"12px",right:"12px"}}>
           <ScorePill score={getScore(cov)}/>
         </div>
@@ -406,7 +372,8 @@ function StoryModal({story, onClose}) {
   if (!story) return null;
   const articles = story.articles||[];
   const cov = story.coverageByOrientation||story.coverage_by_orientation||{};
-  const img = useStoryImage(story);
+  const articleImg = getStoryImage(story);
+  const gradient = getCategoryGradient(story.category);
   const catIcon = CAT_ICONS[story.category]||CAT_ICONS["default"];
 
   const gauche = articles.filter(a=>(getSource(a.sourceId||a.source_id)?.orientationScore??3)<=1);
@@ -419,9 +386,11 @@ function StoryModal({story, onClose}) {
       <div onClick={e=>e.stopPropagation()} style={{background:"#141414",maxWidth:"660px",width:"100%",borderRadius:"18px",border:"1px solid #1f1f1f",marginBottom:"20px",overflow:"hidden"}}>
 
         {/* Full bleed hero image */}
-        <div style={{height:"220px",position:"relative",overflow:"hidden"}}>
-          <img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}
-            onError={e=>{e.target.src=getFallbackImage("default");}}/>
+        <div style={{height:"220px",position:"relative",overflow:"hidden",background:gradient}}>
+          {articleImg && (
+            <img src={articleImg} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}
+              onError={e=>{e.target.style.display="none";}}/>
+          )}
           <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.2) 0%,#141414 100%)"}}/>
           <button onClick={onClose} style={{position:"absolute",top:"14px",right:"14px",background:"rgba(0,0,0,0.5)",backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.1)",color:"white",width:"32px",height:"32px",borderRadius:"50%",cursor:"pointer",fontSize:"14px",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
           <div style={{position:"absolute",bottom:"14px",left:"16px",display:"flex",alignItems:"center",gap:"8px"}}>
@@ -509,15 +478,16 @@ function StoryModal({story, onClose}) {
 
 // ── Briefing Story Item ───────────────────────────────────────────────────────
 function BriefingStoryItem({story, onClick, index, total}) {
-  const img = useStoryImage(story);
+  const articleImg = getStoryImage(story);
+  const gradient = getCategoryGradient(story.category);
   const cov = story.coverageByOrientation||story.coverage_by_orientation||{};
   const catIcon = CAT_ICONS[story.category]||"📰";
   return (
     <div onClick={()=>onClick(story)} style={{display:"flex",gap:"11px",alignItems:"center",paddingBottom:"10px",borderBottom:index<total-1?"1px solid #1a1a1a":"none",marginBottom:"10px",cursor:"pointer"}}
       onMouseEnter={e=>e.currentTarget.style.opacity="0.8"}
       onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
-      <div style={{width:"56px",height:"56px",borderRadius:"8px",overflow:"hidden",flexShrink:0,position:"relative"}}>
-        <img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>{e.target.src=getFallbackImage("default");}}/>
+      <div style={{width:"56px",height:"56px",borderRadius:"8px",overflow:"hidden",flexShrink:0,position:"relative",background:gradient}}>
+        {articleImg && <img src={articleImg} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>{e.target.style.display="none";}}/>}
         <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.2)"}}/>
       </div>
       <div style={{flex:1,minWidth:0}}>
