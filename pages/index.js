@@ -15,10 +15,16 @@ const STRIPE_PK = "pk_test_51TIeliCNh46FhHW7NcuzCh7D8YE0nIvu8ptqVjHNgYkJg9j9utCv
 // priceId comes from your Stripe dashboard (price_xxx)
 async function openStripeCheckout(priceId, email) {
   try {
-    const res = await fetch(`${API_URL}/api/stripe/checkout`, {
+    const res = await fetch(`${API_URL}/api/stripe/create-checkout`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ priceId, email, successUrl: window.location.href + "?premium=1", cancelUrl: window.location.href }),
+      body: JSON.stringify({
+        plan: priceId === "price_1TIetmCNh46FhHW7NnpwHfzE" ? "monthly"
+            : priceId === "price_1TIeuNCNh46FhHW76z9lKZTY" ? "annual"
+            : "student",
+        userEmail: email,
+        userId: "",
+      }),
     });
     const data = await res.json();
     if (data.url) window.location.href = data.url;
