@@ -500,6 +500,41 @@ function StoryModal({story, onClose}) {
   );
 }
 
+// ── Briefing Story Item ───────────────────────────────────────────────────────
+function BriefingStoryItem({story, onClick, index, total}) {
+  const cov = story.coverageByOrientation||story.coverage_by_orientation||{};
+  const articleImg = story.articles?.find(a=>a.image_url)?.image_url;
+  const [img, setImg] = useState(articleImg || getFallbackImage(story.category));
+  const catIcon = CAT_ICONS[story.category]||"📰";
+
+  useEffect(()=>{
+    if (!articleImg && story.title) {
+      const keywords = story.title.split(" ").slice(0,4).join(" ");
+      fetchUnsplashImage(keywords).then(url => setImg(url));
+    }
+  }, [story.id]);
+
+  return (
+    <div onClick={()=>onClick(story)} style={{display:"flex",gap:"11px",alignItems:"center",paddingBottom:"10px",borderBottom:index<total-1?"1px solid #1a1a1a":"none",marginBottom:"10px",cursor:"pointer"}}
+      onMouseEnter={e=>e.currentTarget.style.opacity="0.8"}
+      onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+      <div style={{width:"56px",height:"56px",borderRadius:"8px",overflow:"hidden",flexShrink:0,position:"relative"}}>
+        <img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>{e.target.src=getFallbackImage("default");}}/>
+        <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.2)"}}/>
+      </div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:"5px",marginBottom:"4px"}}>
+          <span style={{fontSize:"10px"}}>{catIcon}</span>
+          <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"8px",color:"#333",textTransform:"uppercase",letterSpacing:"0.08em"}}>{story.category||"Actualité"}</span>
+          <ScorePill score={getScore(cov)}/>
+        </div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:"13px",fontWeight:"700",color:"#d0cdc8",lineHeight:"1.3",overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{story.title}</div>
+      </div>
+      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"11px",color:"#222",flexShrink:0}}>→</div>
+    </div>
+  );
+}
+
 // ── Daily Briefing ────────────────────────────────────────────────────────────
 function DailyBriefing({stories, onStoryClick, isPremium, onPremium}) {
   const today = new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
@@ -525,30 +560,9 @@ function DailyBriefing({stories, onStoryClick, isPremium, onPremium}) {
       {/* Top stories */}
       <div style={{padding:"12px 16px"}}>
         <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"8px",color:"#2a2a2a",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:"10px"}}>À la une aujourd'hui</div>
-        {topStories.map((s,i)=>{
-          const cov=s.coverageByOrientation||s.coverage_by_orientation||{};
-          const img=s.articles?.[0]?.image_url||getFallbackImage(s.category);
-          const catIcon=CAT_ICONS[s.category]||"📰";
-          return (
-            <div key={i} onClick={()=>onStoryClick(s)} style={{display:"flex",gap:"11px",alignItems:"center",paddingBottom:"10px",borderBottom:i<topStories.length-1?"1px solid #1a1a1a":"none",marginBottom:"10px",cursor:"pointer"}}
-              onMouseEnter={e=>e.currentTarget.style.opacity="0.8"}
-              onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
-              <div style={{width:"56px",height:"56px",borderRadius:"8px",overflow:"hidden",flexShrink:0,position:"relative"}}>
-                <img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>{e.target.src=getFallbackImage("default");}}/>
-                <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.2)"}}/>
-              </div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:"5px",marginBottom:"4px"}}>
-                  <span style={{fontSize:"10px"}}>{catIcon}</span>
-                  <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"8px",color:"#333",textTransform:"uppercase",letterSpacing:"0.08em"}}>{s.category||"Actualité"}</span>
-                  <ScorePill score={getScore(cov)}/>
-                </div>
-                <div style={{fontFamily:"'Playfair Display',serif",fontSize:"13px",fontWeight:"700",color:"#d0cdc8",lineHeight:"1.3",overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{s.title}</div>
-              </div>
-              <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"11px",color:"#222",flexShrink:0}}>→</div>
-            </div>
-          );
-        })}
+        {topStories.map((s,i)=>(
+          <BriefingStoryItem key={s.id||i} story={s} onClick={onStoryClick} index={i} total={topStories.length}/>
+        ))}
       </div>
 
       {/* Angle mort of the day */}
