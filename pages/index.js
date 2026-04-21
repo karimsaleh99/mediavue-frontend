@@ -3,6 +3,10 @@ import dynamic from "next/dynamic";
 
 const API_URL = "https://mediavue-backend-production.up.railway.app";
 const FREE_LIMIT = 5;
+
+// Set to false before shipping — when true, Ask MV plays a canned response
+// instead of calling the backend (no API key / premium account needed to preview).
+const ASK_DEMO_MODE = true;
 const STORAGE_KEY = "mv_reads";
 const RESET_KEY = "mv_reset";
 const PROFILE_KEY = "mv_profile";
@@ -919,7 +923,7 @@ function AskMVTab({isPremium, onPremium, dark, session}) {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
-  if (!isPremium) {
+  if (!isPremium && !ASK_DEMO_MODE) {
     return (
       <div style={{paddingBottom:"80px",paddingTop:"40px",textAlign:"center"}}>
         <div style={{fontSize:"34px",marginBottom:"14px"}}>🔮</div>
@@ -932,6 +936,40 @@ function AskMVTab({isPremium, onPremium, dark, session}) {
     );
   }
 
+  async function runDemo(question) {
+    const demoCitations = [
+      { n: 1, sourceId: "lemonde", url: "https://lemonde.fr", title: "Réforme: l'exécutif sous pression" },
+      { n: 2, sourceId: "lefigaro", url: "https://lefigaro.fr", title: "Le gouvernement défend son cap" },
+      { n: 3, sourceId: "mediapart", url: "https://mediapart.fr", title: "Enquête: les angles morts du débat" },
+      { n: 4, sourceId: "cnews", url: "https://cnews.fr", title: "L'opposition monte au créneau" },
+    ];
+    setCurrentCitations(demoCitations);
+    setRemaining(19);
+
+    const fakeAnswer = `Les médias français traitent ce sujet de façon très contrastée selon leur orientation.
+
+**Le Monde [1]** privilégie un angle institutionnel, soulignant la "pression sur l'exécutif" et citant abondamment les syndicats. **Mediapart [3]** va plus loin avec une enquête sur les **angles morts du débat** — notamment l'absence de chiffrage indépendant.
+
+À droite, **Le Figaro [2]** défend la cohérence du gouvernement, tandis que **CNews [4]** met en avant les figures de l'opposition.
+
+\`\`\`mv-chart
+{"type":"bar","title":"Volume de couverture par orientation","data":[{"label":"Gauche","value":42,"color":"#c0392b"},{"label":"Centre","value":28,"color":"#7f8c8d"},{"label":"Droite","value":67,"color":"#2980b9"}]}
+\`\`\`
+
+**Angle mort détecté** : aucun média de gauche n'a couvert l'amendement déposé hier soir — à surveiller demain.`;
+
+    const tokens = fakeAnswer.match(/.{1,3}/g) || [];
+    for (const t of tokens) {
+      await new Promise(r => setTimeout(r, 18));
+      setMessages(prev => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        next[next.length - 1] = { ...last, content: last.content + t, citations: demoCitations };
+        return next;
+      });
+    }
+  }
+
   async function send(q) {
     const question = (q || input).trim();
     if (!question || streaming) return;
@@ -942,6 +980,11 @@ function AskMVTab({isPremium, onPremium, dark, session}) {
     const userMsg = { role: "user", content: question };
     const asstMsg = { role: "assistant", content: "", citations: [] };
     setMessages([...messages, userMsg, asstMsg]);
+
+    if (ASK_DEMO_MODE) {
+      try { await runDemo(question); } finally { setStreaming(false); }
+      return;
+    }
 
     try {
       const res = await fetch(`${API_URL}/api/ask`, {
