@@ -858,6 +858,224 @@ function ProfilTab({isPremium, onPremium}) {
   );
 }
 
+// ── Ask MV Tab ────────────────────────────────────────────────────────────────
+const ASK_STARTERS = [
+  "Comment Le Monde et Le Figaro couvrent-ils la réforme des retraites ?",
+  "Quels sujets sont sous-couverts par les médias de gauche cette semaine ?",
+  "Compare le traitement de l'immigration chez CNews vs France Info.",
+];
+
+function parseMvChart(text) {
+  const parts = [];
+  const re = /```mv-chart\s*([\s\S]*?)```/g;
+  let last = 0, m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push({ type: "text", content: text.slice(last, m.index) });
+    try { parts.push({ type: "chart", content: JSON.parse(m[1].trim()) }); }
+    catch { parts.push({ type: "text", content: m[0] }); }
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push({ type: "text", content: text.slice(last) });
+  return parts;
+}
+
+function MiniBarChart({data, title, dark}) {
+  const max = Math.max(...data.map(d => d.value || 0), 1);
+  return (
+    <div style={{background:dark?"#0c0c0c":"#fafaf8",border:`1px solid ${dark?"#1f1f1f":"#eee"}`,borderRadius:"10px",padding:"12px",margin:"8px 0"}}>
+      {title && <div style={{fontFamily:"'Playfair Display',serif",fontSize:"13px",fontWeight:"700",color:dark?"#f0ede8":"#111",marginBottom:"10px"}}>{title}</div>}
+      {data.map((d,i)=>(
+        <div key={i} style={{marginBottom:"6px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:dark?"#888":"#555",marginBottom:"2px"}}>
+            <span>{d.label}</span><span>{d.value}</span>
+          </div>
+          <div style={{height:"6px",background:dark?"#1a1a1a":"#eee",borderRadius:"3px",overflow:"hidden"}}>
+            <div style={{height:"100%",width:`${(d.value/max)*100}%`,background:d.color||"#e74c3c",borderRadius:"3px"}}/>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CitationChip({n, citation, dark}) {
+  return (
+    <a href={citation?.url} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",gap:"4px",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:dark?"#888":"#555",background:dark?"#151515":"#f4f4f2",border:`1px solid ${dark?"#222":"#e0e0e0"}`,padding:"2px 7px",borderRadius:"10px",textDecoration:"none",margin:"2px 3px 2px 0"}}>
+      <span style={{color:"#e74c3c"}}>[{n}]</span>
+      <span>{citation?.sourceId || "?"}</span>
+    </a>
+  );
+}
+
+function AskMVTab({isPremium, onPremium, dark, session}) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [remaining, setRemaining] = useState(null);
+  const [currentCitations, setCurrentCitations] = useState([]);
+  const scrollRef = useRef(null);
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages]);
+
+  if (!isPremium) {
+    return (
+      <div style={{paddingBottom:"80px",paddingTop:"40px",textAlign:"center"}}>
+        <div style={{fontSize:"34px",marginBottom:"14px"}}>🔮</div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:"22px",fontWeight:"700",color:dark?"#f0ede8":"#111",marginBottom:"8px"}}>Ask MV</div>
+        <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"14px",color:dark?"#888":"#555",maxWidth:"320px",margin:"0 auto 22px",lineHeight:"1.55"}}>
+          Posez des questions à nos 40+ sources françaises. Compare les couvertures, détecte les angles morts, génère des graphiques — toujours avec citations.
+        </div>
+        <button onClick={onPremium} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.1em",background:"#e74c3c",color:"white",border:"none",padding:"10px 22px",borderRadius:"6px",cursor:"pointer"}}>DÉBLOQUER — PREMIUM</button>
+      </div>
+    );
+  }
+
+  async function send(q) {
+    const question = (q || input).trim();
+    if (!question || streaming) return;
+    setInput("");
+    setStreaming(true);
+    setCurrentCitations([]);
+    const history = messages.slice(-6);
+    const userMsg = { role: "user", content: question };
+    const asstMsg = { role: "assistant", content: "", citations: [] };
+    setMessages([...messages, userMsg, asstMsg]);
+
+    try {
+      const res = await fetch(`${API_URL}/api/ask`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token || ""}`,
+        },
+        body: JSON.stringify({ question, history }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        if (res.status === 402) { onPremium(); return; }
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let citations = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || "";
+
+        for (const evt of events) {
+          const lines = evt.split("\n");
+          const eventLine = lines.find(l => l.startsWith("event: "));
+          const dataLine = lines.find(l => l.startsWith("data: "));
+          if (!eventLine || !dataLine) continue;
+          const eventName = eventLine.slice(7).trim();
+          const data = JSON.parse(dataLine.slice(6));
+
+          if (eventName === "citations") {
+            citations = data.sources || [];
+            setCurrentCitations(citations);
+            if (data.remaining != null) setRemaining(data.remaining);
+          } else if (eventName === "delta") {
+            setMessages(prev => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              next[next.length - 1] = { ...last, content: last.content + data.text, citations };
+              return next;
+            });
+          } else if (eventName === "done") {
+            if (data.remaining != null) setRemaining(data.remaining);
+          } else if (eventName === "error") {
+            throw new Error(data.message);
+          }
+        }
+      }
+    } catch (err) {
+      setMessages(prev => {
+        const next = [...prev];
+        next[next.length - 1] = { role: "assistant", content: `⚠️ Erreur : ${err.message}`, citations: [] };
+        return next;
+      });
+    } finally {
+      setStreaming(false);
+    }
+  }
+
+  const inputBg = dark ? "#0f0f0f" : "#fff";
+  const inputBorder = dark ? "#222" : "#ddd";
+  const bubbleUser = dark ? "#1c0808" : "#ffeceb";
+  const bubbleAsst = dark ? "#121212" : "#f7f6f3";
+  const textColor = dark ? "#f0ede8" : "#111";
+
+  return (
+    <div style={{paddingBottom:"140px",minHeight:"calc(100vh - 200px)",display:"flex",flexDirection:"column"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:"18px",fontWeight:"700",color:textColor}}>Ask MV</div>
+        {remaining != null && (
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:dark?"#666":"#888"}}>{remaining} restantes</div>
+        )}
+      </div>
+
+      <div ref={scrollRef} style={{flex:1,overflowY:"auto",marginBottom:"10px"}}>
+        {messages.length === 0 ? (
+          <div>
+            <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"13px",color:dark?"#777":"#666",marginBottom:"12px",lineHeight:"1.5"}}>
+              Demandez comment les médias français couvrent un sujet. Chaque réponse est sourcée.
+            </div>
+            {ASK_STARTERS.map((q,i)=>(
+              <button key={i} onClick={()=>send(q)} style={{display:"block",width:"100%",textAlign:"left",background:bubbleAsst,border:`1px solid ${inputBorder}`,borderRadius:"10px",padding:"11px 13px",marginBottom:"7px",fontFamily:"'Source Serif 4',serif",fontSize:"13px",color:textColor,cursor:"pointer"}}>
+                {q}
+              </button>
+            ))}
+          </div>
+        ) : messages.map((m,i)=>(
+          <div key={i} style={{marginBottom:"11px"}}>
+            <div style={{background:m.role==="user"?bubbleUser:bubbleAsst,borderRadius:"12px",padding:"11px 14px",fontFamily:"'Source Serif 4',serif",fontSize:"14px",color:textColor,lineHeight:"1.55",whiteSpace:"pre-wrap"}}>
+              {m.role === "assistant"
+                ? parseMvChart(m.content).map((p,j) =>
+                    p.type === "chart"
+                      ? <MiniBarChart key={j} data={p.content.data||[]} title={p.content.title} dark={dark}/>
+                      : <span key={j}>{p.content}</span>
+                  )
+                : m.content}
+              {m.role === "assistant" && streaming && i === messages.length - 1 && (
+                <span style={{opacity:0.4}}>▋</span>
+              )}
+            </div>
+            {m.role === "assistant" && m.citations?.length > 0 && (
+              <div style={{marginTop:"6px",display:"flex",flexWrap:"wrap"}}>
+                {m.citations.map(c => <CitationChip key={c.n} n={c.n} citation={c} dark={dark}/>)}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div style={{position:"fixed",bottom:"55px",left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:"480px",padding:"10px 13px",background:dark?"#000":"#fff",borderTop:`1px solid ${inputBorder}`}}>
+        <form onSubmit={(e)=>{e.preventDefault();send();}} style={{display:"flex",gap:"7px"}}>
+          <input
+            value={input}
+            onChange={(e)=>setInput(e.target.value)}
+            placeholder="Posez votre question…"
+            disabled={streaming}
+            style={{flex:1,fontFamily:"'Source Serif 4',serif",fontSize:"14px",background:inputBg,border:`1px solid ${inputBorder}`,borderRadius:"20px",padding:"9px 14px",color:textColor,outline:"none"}}
+          />
+          <button type="submit" disabled={streaming||!input.trim()} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.08em",background:"#e74c3c",color:"white",border:"none",padding:"0 16px",borderRadius:"20px",cursor:streaming?"wait":"pointer",opacity:(streaming||!input.trim())?0.5:1}}>
+            {streaming ? "…" : "→"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── Sources Tab ───────────────────────────────────────────────────────────────
 function SourcesTab() {
   const [filter, setFilter] = useState("all");
@@ -1173,6 +1391,7 @@ function MédiaVueApp() {
   const navItems = [
     {id:"news",icon:"📰",label:"Actualités"},
     {id:"blindspot",icon:"⚠️",label:"Angles morts"},
+    {id:"ask",icon:"🔮",label:"Ask MV"},
     {id:"sources",icon:"📋",label:"Sources"},
     {id:"profile",icon:"👤",label:"Mon Profil"},
   ];
@@ -1220,6 +1439,7 @@ function MédiaVueApp() {
         <div style={{padding:"13px 13px 0"}}>
           {tab==="news"&&<FeedTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark}/>}
           {tab==="blindspot"&&<AngleMortTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark}/>}
+          {tab==="ask"&&<AskMVTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark} session={session}/>}
           {tab==="sources"&&<SourcesTab dark={dark}/>}
           {tab==="profile"&&<ProfilTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark} session={session} onSignOut={handleSignOut} onSignIn={()=>setShowAuth(true)}/>}
         </div>
