@@ -942,7 +942,7 @@ function ProfilTab({isPremium, onPremium, dark}) {
           <span style={{fontSize:"16px"}}>🏛️</span>
           <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#1e8449",letterSpacing:"0.1em",textTransform:"uppercase"}}>Bientôt · Tracker Politique</div>
         </div>
-        <p style={{fontFamily:"'Source Serif 4',serif",fontSize:"13px",color:"#2a4a2a",lineHeight:"1.5",margin:"0 0 6px"}}>Tweets des politiciens en temps réel. Disponible pour les Sénatoriales 2026.</p>
+        <p style={{fontFamily:"'Source Serif 4',serif",fontSize:"13px",color:"#2a4a2a",lineHeight:"1.5",margin:"0 0 6px"}}>Tweets des politiciens en temps réel. Disponible pour les Présidentielles 2027.</p>
         <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#1a3a1a"}}>Macron · Le Pen · Mélenchon · Bardella · +50</div>
       </div>
     </div>
