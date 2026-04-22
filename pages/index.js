@@ -1,12 +1,39 @@
 import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
+import Head from "next/head";
 
 const API_URL = "https://mediavue-backend-production.up.railway.app";
 const FREE_LIMIT = 5;
+
+// Ask MV branding — single source of truth. Change here to rename everywhere.
+const ASK_NAME = "Ask MV";
+
+// Waitlist mode: feature is visible as a "Bientôt" teaser with email capture.
+// Flip to false when you're ready to flip the live Anthropic-powered version on.
+const ASK_WAITLIST_MODE = true;
+
+// Legacy demo flag retained for reference (unused while WAITLIST_MODE is on).
+const ASK_DEMO_MODE = false;
+
+// Domains for logo lookup via DuckDuckGo favicons (free, no auth).
+const SOURCE_DOMAINS = {
+  lemonde: "lemonde.fr", lefigaro: "lefigaro.fr", liberation: "liberation.fr",
+  mediapart: "mediapart.fr", bfmtv: "bfmtv.com", lesechos: "lesechos.fr",
+  cnews: "cnews.fr", franceinfo: "francetvinfo.fr", france24: "france24.com",
+  leparisien: "leparisien.fr", blast: "blast-info.fr", marianne: "marianne.net",
+  lepoint: "lepoint.fr", valeursactuelles: "valeursactuelles.com",
+  "20minutes": "20minutes.fr", ouestfrance: "ouest-france.fr",
+  lobs: "nouvelobs.com", humanite: "humanite.fr", lacroix: "la-croix.com",
+  lexpress: "lexpress.fr",
+};
 const STORAGE_KEY = "mv_reads";
 const RESET_KEY = "mv_reset";
 const PROFILE_KEY = "mv_profile";
 const THEME_KEY = "mv_theme";
+const STREAK_KEY = "mv_streak";
+const ONBOARDED_KEY = "mv_onboarded";
+const PWA_DISMISSED_KEY = "mv_pwa_dismissed";
+const REF_CODE_KEY = "mv_ref_code";
 
 // Stripe config
 const STRIPE_PK = "pk_test_51TIeliCNh46FhHW7NcuzCh7D8YE0nIvu8ptqVjHNgYkJg9j9utCvuxTTlcB4C3xGivRfEnWuwmkFSurQ6HdmoVfV00vP1rCMG3";
@@ -210,6 +237,28 @@ function updateProfile(sourceIds) {
     localStorage.setItem(PROFILE_KEY,JSON.stringify(p));
   } catch {}
 }
+function getStreak() {
+  try { return JSON.parse(localStorage.getItem(STREAK_KEY)||'{"count":0,"lastDate":""}'); }
+  catch { return {count:0,lastDate:""}; }
+}
+function bumpStreak() {
+  try {
+    const today = new Date().toDateString();
+    const y = new Date(Date.now()-86400000).toDateString();
+    const s = getStreak();
+    if (s.lastDate === today) return s;
+    const next = { count: s.lastDate === y ? s.count+1 : 1, lastDate: today };
+    localStorage.setItem(STREAK_KEY, JSON.stringify(next));
+    return next;
+  } catch { return {count:0,lastDate:""}; }
+}
+function getReferralCode() {
+  try {
+    let c = localStorage.getItem(REF_CODE_KEY);
+    if (!c) { c = Math.random().toString(36).slice(2,8).toUpperCase(); localStorage.setItem(REF_CODE_KEY,c); }
+    return c;
+  } catch { return "MV" + Math.floor(Math.random()*9999); }
+}
 function getCategoryGradient(category) {
   return CAT_GRADIENTS[category] || CAT_GRADIENTS["default"];
 }
@@ -226,6 +275,19 @@ function Logo() {
 // ── Source Chip ───────────────────────────────────────────────────────────────
 function SrcChip({id, size=26}) {
   const s = getSource(id);
+  const domain = SOURCE_DOMAINS[id];
+  const [failed, setFailed] = useState(false);
+  if (domain && !failed) {
+    return (
+      <img
+        src={`https://icons.duckduckgo.com/ip3/${domain}.ico`}
+        alt={s.name}
+        title={s.name}
+        onError={() => setFailed(true)}
+        style={{width:size,height:size,borderRadius:"5px",background:"#fff",objectFit:"contain",padding:"2px",flexShrink:0,boxSizing:"border-box"}}
+      />
+    );
+  }
   return (
     <div title={s.name} style={{width:size,height:size,borderRadius:"5px",background:s.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:Math.max(7,size*0.28),color:"white",fontFamily:"'IBM Plex Mono',monospace",fontWeight:"700",flexShrink:0}}>
       {s.logo}
@@ -509,12 +571,26 @@ function StoryCard({story, onClick, locked, onLock}) {
 
 // ── Story Modal ───────────────────────────────────────────────────────────────
 function StoryModal({story, onClose}) {
+  const [shared, setShared] = useState(false);
   if (!story) return null;
   const articles = story.articles||[];
   const cov = story.coverageByOrientation||story.coverage_by_orientation||{};
   const articleImg = getStoryImage(story);
   const gradient = getCategoryGradient(story.category);
   const catIcon = CAT_ICONS[story.category]||CAT_ICONS["default"];
+
+  async function handleShare() {
+    const shareUrl = typeof window !== "undefined" ? window.location.origin + "/?story=" + (story.id||"") : "";
+    const shareData = {
+      title: story.title,
+      text: `${story.title} — vu sous tous les angles sur MédiaVue`,
+      url: shareUrl,
+    };
+    try {
+      if (navigator.share) { await navigator.share(shareData); }
+      else { await navigator.clipboard.writeText(`${story.title}\n${shareUrl}`); setShared(true); setTimeout(()=>setShared(false),1800); }
+    } catch {}
+  }
 
   const gauche = articles.filter(a=>(getSource(a.sourceId||a.source_id)?.orientationScore??3)<=1);
   const centre = articles.filter(a=>{const s=getSource(a.sourceId||a.source_id)?.orientationScore??3;return s>1&&s<4;});
@@ -532,7 +608,12 @@ function StoryModal({story, onClose}) {
               onError={e=>{e.target.style.display="none";}}/>
           )}
           <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.2) 0%,#141414 100%)"}}/>
-          <button onClick={onClose} style={{position:"absolute",top:"14px",right:"14px",background:"rgba(0,0,0,0.5)",backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.1)",color:"white",width:"32px",height:"32px",borderRadius:"50%",cursor:"pointer",fontSize:"14px",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+          <div style={{position:"absolute",top:"14px",right:"14px",display:"flex",gap:"7px"}}>
+            <button onClick={handleShare} title="Partager" style={{background:"rgba(0,0,0,0.5)",backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.1)",color:"white",width:"32px",height:"32px",borderRadius:"50%",cursor:"pointer",fontSize:"13px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              {shared ? "✓" : "↗"}
+            </button>
+            <button onClick={onClose} style={{background:"rgba(0,0,0,0.5)",backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.1)",color:"white",width:"32px",height:"32px",borderRadius:"50%",cursor:"pointer",fontSize:"14px",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+          </div>
           <div style={{position:"absolute",bottom:"14px",left:"16px",display:"flex",alignItems:"center",gap:"8px"}}>
             <span style={{fontSize:"14px"}}>{catIcon}</span>
             <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"rgba(255,255,255,0.6)",letterSpacing:"0.1em",textTransform:"uppercase"}}>{story.category}</span>
@@ -592,21 +673,28 @@ function StoryModal({story, onClose}) {
             <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.12em",textTransform:"uppercase",color:"#333",marginBottom:"12px"}}>Tous les articles · {articles.length}</div>
             {articles.map((a,i)=>{
               const src=getSource(a.sourceId||a.source_id);
+              const isLast = i === articles.length - 1;
               return (
-                <div key={i} style={{display:"flex",gap:"11px",alignItems:"flex-start",paddingBottom:"11px",borderBottom:i<articles.length-1?"1px solid #191919":"none",marginBottom:"11px"}}>
-                  <SrcName id={a.sourceId||a.source_id} size="md"/>
-                  <div style={{flex:1}}>
-                    <div style={{display:"flex",alignItems:"center",gap:"7px",marginBottom:"4px"}}>
-                      <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:ORI_COLOR[src.orientation]||"#444"}}>● {src.orientation}</span>
-                    </div>
-                    <a href={a.url} target="_blank" rel="noopener noreferrer"
-                      style={{fontFamily:"'Source Serif 4',serif",fontSize:"13px",color:"#b0a898",textDecoration:"none",lineHeight:"1.4",display:"block"}}
-                      onMouseEnter={e=>e.target.style.color="#4a90d9"}
-                      onMouseLeave={e=>e.target.style.color="#b0a898"}>
+                <a
+                  key={i}
+                  href={a.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{display:"flex",gap:"12px",alignItems:"center",padding:"12px 0",borderBottom:isLast?"none":"1px solid #191919",textDecoration:"none"}}
+                >
+                  <SrcChip id={a.sourceId||a.source_id} size={34}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"13.5px",color:"#d4cfc2",lineHeight:"1.4",marginBottom:"5px",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>
                       {a.title}
-                    </a>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:"7px",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#666"}}>
+                      <span style={{color:"#888"}}>{src.name}</span>
+                      <span style={{width:2,height:2,borderRadius:"50%",background:"#333"}}/>
+                      <span style={{color:ORI_COLOR[src.orientation]||"#555"}}>● {src.orientation}</span>
+                    </div>
                   </div>
-                </div>
+                  <span style={{color:"#333",fontSize:"14px",flexShrink:0}}>↗</span>
+                </a>
               );
             })}
           </div>
@@ -758,7 +846,7 @@ function AngleMortTab({isPremium, onPremium}) {
 }
 
 // ── Profile Tab ───────────────────────────────────────────────────────────────
-function ProfilTab({isPremium, onPremium}) {
+function ProfilTab({isPremium, onPremium, dark}) {
   const [profile] = useState(getProfile());
   const total = profile.gauche+profile.centre+profile.droite;
   const gPct = total>0?Math.round((profile.gauche/total)*100):0;
@@ -781,6 +869,9 @@ function ProfilTab({isPremium, onPremium}) {
         <div style={{fontFamily:"'Playfair Display',serif",fontSize:"16px",fontWeight:"700",color:"#f0ede8",marginBottom:"3px"}}>Mon Profil Médiatique</div>
         <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:isPremium?"#1e8449":"#333",letterSpacing:"0.1em"}}>{isPremium?"● COMPTE PREMIUM":"Compte gratuit"}</div>
       </div>
+
+      <StreakBadge dark={dark}/>
+      <ReferralCard dark={dark}/>
 
       {total===0?(
         <div style={{background:"#161616",border:"1px solid #1f1f1f",borderRadius:"12px",padding:"28px",marginBottom:"12px",textAlign:"center"}}>
@@ -858,6 +949,353 @@ function ProfilTab({isPremium, onPremium}) {
   );
 }
 
+// ── Ask MV Tab ────────────────────────────────────────────────────────────────
+const ASK_STARTERS = [
+  "Comment Le Monde et Le Figaro couvrent-ils la réforme des retraites ?",
+  "Quels sujets sont sous-couverts par les médias de gauche cette semaine ?",
+  "Compare le traitement de l'immigration chez CNews vs France Info.",
+];
+
+function parseMvChart(text) {
+  const parts = [];
+  const re = /```mv-chart\s*([\s\S]*?)```/g;
+  let last = 0, m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push({ type: "text", content: text.slice(last, m.index) });
+    try { parts.push({ type: "chart", content: JSON.parse(m[1].trim()) }); }
+    catch { parts.push({ type: "text", content: m[0] }); }
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push({ type: "text", content: text.slice(last) });
+  return parts;
+}
+
+function MiniBarChart({data, title, dark}) {
+  const max = Math.max(...data.map(d => d.value || 0), 1);
+  return (
+    <div style={{background:dark?"#0c0c0c":"#fafaf8",border:`1px solid ${dark?"#1f1f1f":"#eee"}`,borderRadius:"10px",padding:"12px",margin:"8px 0"}}>
+      {title && <div style={{fontFamily:"'Playfair Display',serif",fontSize:"13px",fontWeight:"700",color:dark?"#f0ede8":"#111",marginBottom:"10px"}}>{title}</div>}
+      {data.map((d,i)=>(
+        <div key={i} style={{marginBottom:"6px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:dark?"#888":"#555",marginBottom:"2px"}}>
+            <span>{d.label}</span><span>{d.value}</span>
+          </div>
+          <div style={{height:"6px",background:dark?"#1a1a1a":"#eee",borderRadius:"3px",overflow:"hidden"}}>
+            <div style={{height:"100%",width:`${(d.value/max)*100}%`,background:d.color||"#e74c3c",borderRadius:"3px"}}/>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CitationChip({n, citation, dark}) {
+  return (
+    <a href={citation?.url} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",gap:"4px",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:dark?"#888":"#555",background:dark?"#151515":"#f4f4f2",border:`1px solid ${dark?"#222":"#e0e0e0"}`,padding:"2px 7px",borderRadius:"10px",textDecoration:"none",margin:"2px 3px 2px 0"}}>
+      <span style={{color:"#e74c3c"}}>[{n}]</span>
+      <span>{citation?.sourceId || "?"}</span>
+    </a>
+  );
+}
+
+function AskWaitlistCard({dark, session}) {
+  const [email, setEmail] = useState(session?.user?.email || "");
+  const [status, setStatus] = useState("idle"); // idle | loading | done | error
+  const [message, setMessage] = useState("");
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setMessage("Email invalide"); setStatus("error"); return;
+    }
+    setStatus("loading"); setMessage("");
+    try {
+      const res = await fetch(`${API_URL}/api/ask/waitlist`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, feature: ASK_NAME }),
+      });
+      if (!res.ok && res.status !== 409) throw new Error(`HTTP ${res.status}`);
+      setStatus("done");
+      setMessage(res.status === 409 ? "Vous êtes déjà inscrit." : "Inscrit. On vous prévient au lancement.");
+    } catch {
+      try { localStorage.setItem(`mv_waitlist_${ASK_NAME}`, email); } catch {}
+      setStatus("done");
+      setMessage("Inscrit localement. On vous prévient au lancement.");
+    }
+  }
+
+  const card = dark ? "#121212" : "#fafaf8";
+  const border = dark ? "#1f1f1f" : "#e8e6e0";
+  const text = dark ? "#f0ede8" : "#111";
+  const muted = dark ? "#888" : "#666";
+
+  return (
+    <div style={{paddingBottom:"80px",paddingTop:"18px"}}>
+      <div style={{background:card,border:`1px solid ${border}`,borderRadius:"18px",padding:"26px 22px",textAlign:"center"}}>
+        <div style={{display:"inline-block",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.14em",color:"#e74c3c",border:"1px solid #3d1010",background:"#1c0808",padding:"3px 9px",borderRadius:"20px",marginBottom:"14px"}}>BIENTÔT — PREMIUM</div>
+        <div style={{fontSize:"34px",marginBottom:"10px"}}>🔮</div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:"26px",fontWeight:"700",color:text,marginBottom:"8px",letterSpacing:"-0.01em"}}>{ASK_NAME}</div>
+        <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"14.5px",color:muted,maxWidth:"360px",margin:"0 auto 18px",lineHeight:"1.55"}}>
+          Interrogez 20 sources françaises en une question. Comparez les couvertures, détectez les angles morts, visualisez les écarts. Toujours avec citations.
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"7px",maxWidth:"400px",margin:"0 auto 22px"}}>
+          {[
+            {i:"🎯",l:"Comparer"},
+            {i:"⚠️",l:"Angles morts"},
+            {i:"📊",l:"Graphiques"},
+          ].map(({i,l})=>(
+            <div key={l} style={{background:dark?"#0c0c0c":"#fff",border:`1px solid ${border}`,borderRadius:"10px",padding:"10px 6px"}}>
+              <div style={{fontSize:"18px",marginBottom:"3px"}}>{i}</div>
+              <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.06em",color:muted}}>{l}</div>
+            </div>
+          ))}
+        </div>
+
+        {status === "done" ? (
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"11px",color:"#1e8449",padding:"14px"}}>
+            ✓ {message}
+          </div>
+        ) : (
+          <form onSubmit={submit} style={{display:"flex",gap:"7px",maxWidth:"380px",margin:"0 auto"}}>
+            <input
+              type="email"
+              value={email}
+              onChange={(e)=>setEmail(e.target.value)}
+              placeholder="votre@email.fr"
+              disabled={status==="loading"}
+              style={{flex:1,fontFamily:"'Source Serif 4',serif",fontSize:"14px",background:dark?"#0f0f0f":"#fff",border:`1px solid ${border}`,borderRadius:"22px",padding:"10px 14px",color:text,outline:"none"}}
+            />
+            <button type="submit" disabled={status==="loading"} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.1em",background:"#e74c3c",color:"white",border:"none",padding:"0 18px",borderRadius:"22px",cursor:"pointer",opacity:status==="loading"?0.5:1}}>
+              {status==="loading" ? "…" : "M'INSCRIRE"}
+            </button>
+          </form>
+        )}
+        {status === "error" && (
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",color:"#e74c3c",marginTop:"10px"}}>{message}</div>
+        )}
+
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:dark?"#444":"#aaa",marginTop:"16px",letterSpacing:"0.06em"}}>
+          Pas de spam. Prévenu une seule fois, au lancement.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AskMVTab({isPremium, onPremium, dark, session}) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [remaining, setRemaining] = useState(null);
+  const [currentCitations, setCurrentCitations] = useState([]);
+  const scrollRef = useRef(null);
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages]);
+
+  if (ASK_WAITLIST_MODE) {
+    return <AskWaitlistCard dark={dark} session={session}/>;
+  }
+
+  if (!isPremium && !ASK_DEMO_MODE) {
+    return (
+      <div style={{paddingBottom:"80px",paddingTop:"40px",textAlign:"center"}}>
+        <div style={{fontSize:"34px",marginBottom:"14px"}}>🔮</div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:"22px",fontWeight:"700",color:dark?"#f0ede8":"#111",marginBottom:"8px"}}>{ASK_NAME}</div>
+        <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"14px",color:dark?"#888":"#555",maxWidth:"320px",margin:"0 auto 22px",lineHeight:"1.55"}}>
+          Posez des questions à nos 40+ sources françaises. Compare les couvertures, détecte les angles morts, génère des graphiques — toujours avec citations.
+        </div>
+        <button onClick={onPremium} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.1em",background:"#e74c3c",color:"white",border:"none",padding:"10px 22px",borderRadius:"6px",cursor:"pointer"}}>DÉBLOQUER — PREMIUM</button>
+      </div>
+    );
+  }
+
+  async function runDemo(question) {
+    const demoCitations = [
+      { n: 1, sourceId: "lemonde", url: "https://lemonde.fr", title: "Réforme: l'exécutif sous pression" },
+      { n: 2, sourceId: "lefigaro", url: "https://lefigaro.fr", title: "Le gouvernement défend son cap" },
+      { n: 3, sourceId: "mediapart", url: "https://mediapart.fr", title: "Enquête: les angles morts du débat" },
+      { n: 4, sourceId: "cnews", url: "https://cnews.fr", title: "L'opposition monte au créneau" },
+    ];
+    setCurrentCitations(demoCitations);
+    setRemaining(19);
+
+    const fakeAnswer = `Les médias français traitent ce sujet de façon très contrastée selon leur orientation.
+
+**Le Monde [1]** privilégie un angle institutionnel, soulignant la "pression sur l'exécutif" et citant abondamment les syndicats. **Mediapart [3]** va plus loin avec une enquête sur les **angles morts du débat** — notamment l'absence de chiffrage indépendant.
+
+À droite, **Le Figaro [2]** défend la cohérence du gouvernement, tandis que **CNews [4]** met en avant les figures de l'opposition.
+
+\`\`\`mv-chart
+{"type":"bar","title":"Volume de couverture par orientation","data":[{"label":"Gauche","value":42,"color":"#c0392b"},{"label":"Centre","value":28,"color":"#7f8c8d"},{"label":"Droite","value":67,"color":"#2980b9"}]}
+\`\`\`
+
+**Angle mort détecté** : aucun média de gauche n'a couvert l'amendement déposé hier soir — à surveiller demain.`;
+
+    const tokens = fakeAnswer.match(/.{1,3}/g) || [];
+    for (const t of tokens) {
+      await new Promise(r => setTimeout(r, 18));
+      setMessages(prev => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        next[next.length - 1] = { ...last, content: last.content + t, citations: demoCitations };
+        return next;
+      });
+    }
+  }
+
+  async function send(q) {
+    const question = (q || input).trim();
+    if (!question || streaming) return;
+    setInput("");
+    setStreaming(true);
+    setCurrentCitations([]);
+    const history = messages.slice(-6);
+    const userMsg = { role: "user", content: question };
+    const asstMsg = { role: "assistant", content: "", citations: [] };
+    setMessages([...messages, userMsg, asstMsg]);
+
+    if (ASK_DEMO_MODE) {
+      try { await runDemo(question); } finally { setStreaming(false); }
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/api/ask`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token || ""}`,
+        },
+        body: JSON.stringify({ question, history }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        if (res.status === 402) { onPremium(); return; }
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let citations = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || "";
+
+        for (const evt of events) {
+          const lines = evt.split("\n");
+          const eventLine = lines.find(l => l.startsWith("event: "));
+          const dataLine = lines.find(l => l.startsWith("data: "));
+          if (!eventLine || !dataLine) continue;
+          const eventName = eventLine.slice(7).trim();
+          const data = JSON.parse(dataLine.slice(6));
+
+          if (eventName === "citations") {
+            citations = data.sources || [];
+            setCurrentCitations(citations);
+            if (data.remaining != null) setRemaining(data.remaining);
+          } else if (eventName === "delta") {
+            setMessages(prev => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              next[next.length - 1] = { ...last, content: last.content + data.text, citations };
+              return next;
+            });
+          } else if (eventName === "done") {
+            if (data.remaining != null) setRemaining(data.remaining);
+          } else if (eventName === "error") {
+            throw new Error(data.message);
+          }
+        }
+      }
+    } catch (err) {
+      setMessages(prev => {
+        const next = [...prev];
+        next[next.length - 1] = { role: "assistant", content: `⚠️ Erreur : ${err.message}`, citations: [] };
+        return next;
+      });
+    } finally {
+      setStreaming(false);
+    }
+  }
+
+  const inputBg = dark ? "#0f0f0f" : "#fff";
+  const inputBorder = dark ? "#222" : "#ddd";
+  const bubbleUser = dark ? "#1c0808" : "#ffeceb";
+  const bubbleAsst = dark ? "#121212" : "#f7f6f3";
+  const textColor = dark ? "#f0ede8" : "#111";
+
+  return (
+    <div style={{paddingBottom:"140px",minHeight:"calc(100vh - 200px)",display:"flex",flexDirection:"column"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:"18px",fontWeight:"700",color:textColor}}>{ASK_NAME}</div>
+        {remaining != null && (
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:dark?"#666":"#888"}}>{remaining} restantes</div>
+        )}
+      </div>
+
+      <div ref={scrollRef} style={{flex:1,overflowY:"auto",marginBottom:"10px"}}>
+        {messages.length === 0 ? (
+          <div>
+            <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"13px",color:dark?"#777":"#666",marginBottom:"12px",lineHeight:"1.5"}}>
+              Demandez comment les médias français couvrent un sujet. Chaque réponse est sourcée.
+            </div>
+            {ASK_STARTERS.map((q,i)=>(
+              <button key={i} onClick={()=>send(q)} style={{display:"block",width:"100%",textAlign:"left",background:bubbleAsst,border:`1px solid ${inputBorder}`,borderRadius:"10px",padding:"11px 13px",marginBottom:"7px",fontFamily:"'Source Serif 4',serif",fontSize:"13px",color:textColor,cursor:"pointer"}}>
+                {q}
+              </button>
+            ))}
+          </div>
+        ) : messages.map((m,i)=>(
+          <div key={i} style={{marginBottom:"11px"}}>
+            <div style={{background:m.role==="user"?bubbleUser:bubbleAsst,borderRadius:"12px",padding:"11px 14px",fontFamily:"'Source Serif 4',serif",fontSize:"14px",color:textColor,lineHeight:"1.55",whiteSpace:"pre-wrap"}}>
+              {m.role === "assistant"
+                ? parseMvChart(m.content).map((p,j) =>
+                    p.type === "chart"
+                      ? <MiniBarChart key={j} data={p.content.data||[]} title={p.content.title} dark={dark}/>
+                      : <span key={j}>{p.content}</span>
+                  )
+                : m.content}
+              {m.role === "assistant" && streaming && i === messages.length - 1 && (
+                <span style={{opacity:0.4}}>▋</span>
+              )}
+            </div>
+            {m.role === "assistant" && m.citations?.length > 0 && (
+              <div style={{marginTop:"6px",display:"flex",flexWrap:"wrap"}}>
+                {m.citations.map(c => <CitationChip key={c.n} n={c.n} citation={c} dark={dark}/>)}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div style={{position:"fixed",bottom:"55px",left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:"480px",padding:"10px 13px",background:dark?"#000":"#fff",borderTop:`1px solid ${inputBorder}`}}>
+        <form onSubmit={(e)=>{e.preventDefault();send();}} style={{display:"flex",gap:"7px"}}>
+          <input
+            value={input}
+            onChange={(e)=>setInput(e.target.value)}
+            placeholder="Posez votre question…"
+            disabled={streaming}
+            style={{flex:1,fontFamily:"'Source Serif 4',serif",fontSize:"14px",background:inputBg,border:`1px solid ${inputBorder}`,borderRadius:"20px",padding:"9px 14px",color:textColor,outline:"none"}}
+          />
+          <button type="submit" disabled={streaming||!input.trim()} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.08em",background:"#e74c3c",color:"white",border:"none",padding:"0 16px",borderRadius:"20px",cursor:streaming?"wait":"pointer",opacity:(streaming||!input.trim())?0.5:1}}>
+            {streaming ? "…" : "→"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── Sources Tab ───────────────────────────────────────────────────────────────
 function SourcesTab() {
   const [filter, setFilter] = useState("all");
@@ -926,6 +1364,7 @@ function FeedTab({isPremium, onPremium}) {
     setSelected(story);
     updateProfile(story.sourceIds||story.source_ids||[]);
     setReads(incrementReads());
+    bumpStreak();
     if (!story.articles&&story.id){try{setSelected(await (await fetch(`${API_URL}/api/stories/${story.id}`)).json());}catch{}}
   };
 
@@ -966,12 +1405,7 @@ function FeedTab({isPremium, onPremium}) {
       {loading&&<div style={{width:"22px",height:"22px",border:"2px solid #1f1f1f",borderTopColor:"#e74c3c",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"60px auto"}}/>}
       {error&&<div style={{padding:"14px",background:"#1c0808",border:"1px solid #3d1010",borderRadius:"10px",fontFamily:"'IBM Plex Mono',monospace",fontSize:"11px",color:"#e74c3c"}}>{error}</div>}
 
-      {/* Daily briefing */}
-      {!loading&&stories.length>0&&category==="Tout"&&!search&&(
-        <DailyBriefing stories={filtered} onStoryClick={handleClick} isPremium={isPremium} onPremium={onPremium}/>
-      )}
-
-      {/* Breaking */}
+      {/* Breaking — always on top */}
       {!loading&&breaking.length>0&&(
         <div style={{marginBottom:"16px"}}>
           <div style={{display:"flex",alignItems:"center",gap:"7px",marginBottom:"10px"}}>
@@ -983,9 +1417,22 @@ function FeedTab({isPremium, onPremium}) {
         </div>
       )}
 
-      {!loading&&!error&&regular.map((s,i)=>(
+      {/* First 3 regular stories */}
+      {!loading&&!error&&regular.slice(0,3).map((s,i)=>(
         <div key={s.id||i} style={{animation:`fadeUp 0.3s ease ${Math.min(i,8)*0.035}s both`}}>
           <StoryCard story={s} onClick={handleClick} locked={!isPremium&&reads+i>=FREE_LIMIT} onLock={()=>setShowPaywall(true)}/>
+        </div>
+      ))}
+
+      {/* Daily briefing — after the first batch of headlines */}
+      {!loading&&stories.length>0&&category==="Tout"&&!search&&(
+        <DailyBriefing stories={filtered} onStoryClick={handleClick} isPremium={isPremium} onPremium={onPremium}/>
+      )}
+
+      {/* Remaining regular stories */}
+      {!loading&&!error&&regular.slice(3).map((s,i)=>(
+        <div key={s.id||(i+3)} style={{animation:`fadeUp 0.3s ease ${Math.min(i+3,8)*0.035}s both`}}>
+          <StoryCard story={s} onClick={handleClick} locked={!isPremium&&reads+i+3>=FREE_LIMIT} onLock={()=>setShowPaywall(true)}/>
         </div>
       ))}
 
@@ -1101,6 +1548,183 @@ function AuthScreen({onAuth, dark}) {
   );
 }
 
+// ── Onboarding Modal ──────────────────────────────────────────────────────────
+function OnboardingModal({onDone, dark}) {
+  const [step, setStep] = useState(0);
+  const [picked, setPicked] = useState([]);
+
+  const togglePick = (id) => setPicked(p => p.includes(id) ? p.filter(x=>x!==id) : p.length<5 ? [...p,id] : p);
+
+  const finish = () => {
+    try {
+      localStorage.setItem(ONBOARDED_KEY, "1");
+      if (picked.length > 0) updateProfile(picked);
+    } catch {}
+    onDone();
+  };
+
+  const bg = dark ? "#141414" : "#fff";
+  const border = dark ? "#1f1f1f" : "#e8e6e0";
+  const text = dark ? "#f0ede8" : "#111";
+  const muted = dark ? "#888" : "#666";
+
+  const steps = [
+    {
+      title: "Bienvenue sur MédiaVue",
+      body: "L'actualité française, vue sous tous les angles. Nous agrégeons 20 sources de tous les bords politiques pour vous montrer ce qui est couvert — et ce qui ne l'est pas.",
+      emoji: "📰",
+    },
+    {
+      title: "L'échelle de biais",
+      body: "De gauche à droite, -3 à +3. Chaque source est notée selon une méthodologie basée sur des études académiques (MediaBiasFactCheck, Reporters Sans Frontières). La fiabilité des faits est séparée du positionnement.",
+      emoji: "⚖️",
+      chart: true,
+    },
+    {
+      title: "Choisissez vos médias",
+      body: "Sélectionnez jusqu'à 5 sources que vous lisez déjà. On vous montrera les angles morts par rapport à ces choix.",
+      emoji: "🎯",
+      pick: true,
+    },
+  ];
+
+  const s = steps[step];
+  const isLast = step === steps.length - 1;
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px",backdropFilter:"blur(8px)"}}>
+      <div style={{background:bg,border:`1px solid ${border}`,borderRadius:"18px",maxWidth:"440px",width:"100%",padding:"28px 22px",maxHeight:"90vh",overflowY:"auto"}}>
+        <div style={{display:"flex",gap:"5px",marginBottom:"18px"}}>
+          {steps.map((_,i)=>(<div key={i} style={{flex:1,height:"3px",borderRadius:"2px",background:i<=step?"#e74c3c":border}}/>))}
+        </div>
+        <div style={{textAlign:"center",marginBottom:"16px"}}>
+          <div style={{fontSize:"34px",marginBottom:"8px"}}>{s.emoji}</div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:"22px",fontWeight:"700",color:text,marginBottom:"8px"}}>{s.title}</div>
+          <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"14px",color:muted,lineHeight:"1.55"}}>{s.body}</div>
+        </div>
+
+        {s.chart && (
+          <div style={{padding:"14px",background:dark?"#0c0c0c":"#f6f4ef",borderRadius:"10px",margin:"12px 0"}}>
+            <div style={{display:"flex",justifyContent:"space-between",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:muted,marginBottom:"6px",letterSpacing:"0.08em"}}>
+              <span>GAUCHE -3</span><span>CENTRE</span><span>+3 DROITE</span>
+            </div>
+            <div style={{height:"8px",background:"linear-gradient(90deg, #e74c3c 0%, #888 50%, #3d7ebf 100%)",borderRadius:"4px"}}/>
+          </div>
+        )}
+
+        {s.pick && (
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"7px",margin:"10px 0 14px"}}>
+            {SOURCES.slice(0,12).map(src=>(
+              <button key={src.id} onClick={()=>togglePick(src.id)} style={{background:picked.includes(src.id)?"#1c0808":(dark?"#0f0f0f":"#f6f4ef"),border:`1px solid ${picked.includes(src.id)?"#e74c3c":border}`,borderRadius:"10px",padding:"10px 4px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:"5px"}}>
+                <SrcChip id={src.id} size={28}/>
+                <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"8px",color:picked.includes(src.id)?"#e74c3c":muted,letterSpacing:"0.04em",textAlign:"center"}}>{src.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div style={{display:"flex",gap:"8px",marginTop:"8px"}}>
+          {step>0 && (
+            <button onClick={()=>setStep(step-1)} style={{flex:1,fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.08em",background:"transparent",color:muted,border:`1px solid ${border}`,padding:"11px",borderRadius:"22px",cursor:"pointer"}}>RETOUR</button>
+          )}
+          <button onClick={()=>isLast?finish():setStep(step+1)} style={{flex:2,fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.1em",background:"#e74c3c",color:"white",border:"none",padding:"11px",borderRadius:"22px",cursor:"pointer"}}>
+            {isLast ? "COMMENCER" : "SUIVANT →"}
+          </button>
+        </div>
+        {step===0 && (
+          <button onClick={finish} style={{width:"100%",marginTop:"10px",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",background:"transparent",color:muted,border:"none",cursor:"pointer",letterSpacing:"0.06em"}}>Passer</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── PWA Install Banner ────────────────────────────────────────────────────────
+function PwaInstallBanner({dark}) {
+  const [prompt, setPrompt] = useState(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try { if (localStorage.getItem(PWA_DISMISSED_KEY) === "1") return; } catch {}
+    if (window.matchMedia?.("(display-mode: standalone)")?.matches) return;
+    const handler = (e) => { e.preventDefault(); setPrompt(e); setVisible(true); };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  const dismiss = () => {
+    try { localStorage.setItem(PWA_DISMISSED_KEY, "1"); } catch {}
+    setVisible(false);
+  };
+
+  const install = async () => {
+    if (!prompt) return;
+    prompt.prompt();
+    await prompt.userChoice;
+    setPrompt(null);
+    setVisible(false);
+  };
+
+  if (!visible) return null;
+
+  const bg = dark ? "#141414" : "#fff";
+  const border = dark ? "#1f1f1f" : "#e8e6e0";
+  const text = dark ? "#f0ede8" : "#111";
+
+  return (
+    <div style={{position:"fixed",bottom:"70px",left:"50%",transform:"translateX(-50%)",width:"calc(100% - 26px)",maxWidth:"460px",background:bg,border:`1px solid ${border}`,borderRadius:"14px",padding:"12px 14px",zIndex:300,display:"flex",alignItems:"center",gap:"11px",boxShadow:"0 10px 40px rgba(0,0,0,0.4)"}}>
+      <div style={{fontSize:"22px"}}>📲</div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"13px",color:text,fontWeight:"600"}}>Installer MédiaVue</div>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#888"}}>Ajoutez l'app à votre écran d'accueil</div>
+      </div>
+      <button onClick={install} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",background:"#e74c3c",color:"white",border:"none",padding:"7px 12px",borderRadius:"20px",cursor:"pointer",letterSpacing:"0.06em"}}>INSTALLER</button>
+      <button onClick={dismiss} style={{background:"transparent",border:"none",color:"#555",fontSize:"16px",cursor:"pointer",padding:"4px"}}>✕</button>
+    </div>
+  );
+}
+
+// ── Streak + Referral cards (Profile additions) ───────────────────────────────
+function StreakBadge({dark}) {
+  const [streak] = useState(getStreak);
+  if (!streak.count) return null;
+  const bg = dark ? "#161616" : "#fff";
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:"10px",background:bg,border:`1px solid ${dark?"#1f1f1f":"#e8e6e0"}`,borderRadius:"12px",padding:"13px 16px",marginBottom:"12px"}}>
+      <div style={{fontSize:"22px"}}>🔥</div>
+      <div style={{flex:1}}>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:"17px",fontWeight:"700",color:dark?"#f0ede8":"#111"}}>{streak.count} jour{streak.count>1?"s":""} de suite</div>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#888",letterSpacing:"0.06em"}}>Continuez pour garder votre série</div>
+      </div>
+    </div>
+  );
+}
+
+function ReferralCard({dark}) {
+  const [code] = useState(getReferralCode);
+  const [copied, setCopied] = useState(false);
+  const url = typeof window !== "undefined" ? `${window.location.origin}?ref=${code}` : `?ref=${code}`;
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(()=>setCopied(false),1600); } catch {}
+  };
+  const bg = dark ? "#161616" : "#fff";
+  return (
+    <div style={{background:bg,border:`1px solid ${dark?"#1f1f1f":"#e8e6e0"}`,borderRadius:"12px",padding:"16px",marginBottom:"12px"}}>
+      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#333",letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:"10px"}}>Inviter un ami</div>
+      <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"13px",color:dark?"#888":"#555",marginBottom:"12px",lineHeight:"1.5"}}>
+        Partagez votre lien. Chaque ami qui rejoint vous offre +5 lectures gratuites par jour.
+      </div>
+      <div style={{display:"flex",gap:"7px"}}>
+        <input readOnly value={url} style={{flex:1,fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",background:dark?"#0f0f0f":"#f6f4ef",border:`1px solid ${dark?"#222":"#e0e0e0"}`,color:dark?"#888":"#555",padding:"9px 11px",borderRadius:"18px",outline:"none"}}/>
+        <button onClick={copy} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.08em",background:"#e74c3c",color:"white",border:"none",padding:"0 16px",borderRadius:"18px",cursor:"pointer"}}>
+          {copied ? "COPIÉ ✓" : "COPIER"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 function MédiaVueApp() {
   const [tab, setTab] = useState("news");
@@ -1110,11 +1734,15 @@ function MédiaVueApp() {
   const [showAuth, setShowAuth] = useState(false);
   const [dark, setDark] = useState(true);
   const [authChecked, setAuthChecked] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   // Load theme + session on mount
   useEffect(() => {
     const savedTheme = localStorage.getItem(THEME_KEY);
     if (savedTheme !== null) setDark(savedTheme === "dark");
+    try {
+      if (!localStorage.getItem(ONBOARDED_KEY)) setShowOnboarding(true);
+    } catch {}
 
     // Check if returning from Google OAuth (session in URL hash)
     const urlSession = parseSessionFromUrl();
@@ -1173,6 +1801,7 @@ function MédiaVueApp() {
   const navItems = [
     {id:"news",icon:"📰",label:"Actualités"},
     {id:"blindspot",icon:"⚠️",label:"Angles morts"},
+    {id:"ask",icon:"🔮",label:ASK_NAME},
     {id:"sources",icon:"📋",label:"Sources"},
     {id:"profile",icon:"👤",label:"Mon Profil"},
   ];
@@ -1182,6 +1811,17 @@ function MédiaVueApp() {
 
   return (
     <>
+      <Head>
+        <title>MédiaVue — L'actualité française, vue sous tous les angles</title>
+        <meta name="description" content="Agrégateur de 20+ médias français avec détection des biais et angles morts."/>
+        <meta name="theme-color" content="#e74c3c"/>
+        <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+        <link rel="manifest" href="/manifest.json"/>
+        <link rel="apple-touch-icon" href="/favicon.ico"/>
+        <meta name="apple-mobile-web-app-capable" content="yes"/>
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+        <meta name="apple-mobile-web-app-title" content="MédiaVue"/>
+      </Head>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;600&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
@@ -1220,6 +1860,7 @@ function MédiaVueApp() {
         <div style={{padding:"13px 13px 0"}}>
           {tab==="news"&&<FeedTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark}/>}
           {tab==="blindspot"&&<AngleMortTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark}/>}
+          {tab==="ask"&&<AskMVTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark} session={session}/>}
           {tab==="sources"&&<SourcesTab dark={dark}/>}
           {tab==="profile"&&<ProfilTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark} session={session} onSignOut={handleSignOut} onSignIn={()=>setShowAuth(true)}/>}
         </div>
@@ -1235,6 +1876,8 @@ function MédiaVueApp() {
         </nav>
       </div>
       {showPaywall&&<PaywallModal onClose={()=>setShowPaywall(false)} onPremium={handlePremium} session={session}/>}
+      {showOnboarding&&<OnboardingModal onDone={()=>setShowOnboarding(false)} dark={dark}/>}
+      <PwaInstallBanner dark={dark}/>
     </>
   );
 }
