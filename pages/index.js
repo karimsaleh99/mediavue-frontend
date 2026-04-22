@@ -4,9 +4,27 @@ import dynamic from "next/dynamic";
 const API_URL = "https://mediavue-backend-production.up.railway.app";
 const FREE_LIMIT = 5;
 
-// Set to false before shipping — when true, Ask MV plays a canned response
-// instead of calling the backend (no API key / premium account needed to preview).
-const ASK_DEMO_MODE = true;
+// Ask MV branding — single source of truth. Change here to rename everywhere.
+const ASK_NAME = "Ask MV";
+
+// Waitlist mode: feature is visible as a "Bientôt" teaser with email capture.
+// Flip to false when you're ready to flip the live Anthropic-powered version on.
+const ASK_WAITLIST_MODE = true;
+
+// Legacy demo flag retained for reference (unused while WAITLIST_MODE is on).
+const ASK_DEMO_MODE = false;
+
+// Domains for logo lookup via DuckDuckGo favicons (free, no auth).
+const SOURCE_DOMAINS = {
+  lemonde: "lemonde.fr", lefigaro: "lefigaro.fr", liberation: "liberation.fr",
+  mediapart: "mediapart.fr", bfmtv: "bfmtv.com", lesechos: "lesechos.fr",
+  cnews: "cnews.fr", franceinfo: "francetvinfo.fr", france24: "france24.com",
+  leparisien: "leparisien.fr", blast: "blast-info.fr", marianne: "marianne.net",
+  lepoint: "lepoint.fr", valeursactuelles: "valeursactuelles.com",
+  "20minutes": "20minutes.fr", ouestfrance: "ouest-france.fr",
+  lobs: "nouvelobs.com", humanite: "humanite.fr", lacroix: "la-croix.com",
+  lexpress: "lexpress.fr",
+};
 const STORAGE_KEY = "mv_reads";
 const RESET_KEY = "mv_reset";
 const PROFILE_KEY = "mv_profile";
@@ -230,6 +248,19 @@ function Logo() {
 // ── Source Chip ───────────────────────────────────────────────────────────────
 function SrcChip({id, size=26}) {
   const s = getSource(id);
+  const domain = SOURCE_DOMAINS[id];
+  const [failed, setFailed] = useState(false);
+  if (domain && !failed) {
+    return (
+      <img
+        src={`https://icons.duckduckgo.com/ip3/${domain}.ico`}
+        alt={s.name}
+        title={s.name}
+        onError={() => setFailed(true)}
+        style={{width:size,height:size,borderRadius:"5px",background:"#fff",objectFit:"contain",padding:"2px",flexShrink:0,boxSizing:"border-box"}}
+      />
+    );
+  }
   return (
     <div title={s.name} style={{width:size,height:size,borderRadius:"5px",background:s.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:Math.max(7,size*0.28),color:"white",fontFamily:"'IBM Plex Mono',monospace",fontWeight:"700",flexShrink:0}}>
       {s.logo}
@@ -596,21 +627,28 @@ function StoryModal({story, onClose}) {
             <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.12em",textTransform:"uppercase",color:"#333",marginBottom:"12px"}}>Tous les articles · {articles.length}</div>
             {articles.map((a,i)=>{
               const src=getSource(a.sourceId||a.source_id);
+              const isLast = i === articles.length - 1;
               return (
-                <div key={i} style={{display:"flex",gap:"11px",alignItems:"flex-start",paddingBottom:"11px",borderBottom:i<articles.length-1?"1px solid #191919":"none",marginBottom:"11px"}}>
-                  <SrcName id={a.sourceId||a.source_id} size="md"/>
-                  <div style={{flex:1}}>
-                    <div style={{display:"flex",alignItems:"center",gap:"7px",marginBottom:"4px"}}>
-                      <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:ORI_COLOR[src.orientation]||"#444"}}>● {src.orientation}</span>
-                    </div>
-                    <a href={a.url} target="_blank" rel="noopener noreferrer"
-                      style={{fontFamily:"'Source Serif 4',serif",fontSize:"13px",color:"#b0a898",textDecoration:"none",lineHeight:"1.4",display:"block"}}
-                      onMouseEnter={e=>e.target.style.color="#4a90d9"}
-                      onMouseLeave={e=>e.target.style.color="#b0a898"}>
+                <a
+                  key={i}
+                  href={a.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{display:"flex",gap:"12px",alignItems:"center",padding:"12px 0",borderBottom:isLast?"none":"1px solid #191919",textDecoration:"none"}}
+                >
+                  <SrcChip id={a.sourceId||a.source_id} size={34}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"13.5px",color:"#d4cfc2",lineHeight:"1.4",marginBottom:"5px",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>
                       {a.title}
-                    </a>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:"7px",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#666"}}>
+                      <span style={{color:"#888"}}>{src.name}</span>
+                      <span style={{width:2,height:2,borderRadius:"50%",background:"#333"}}/>
+                      <span style={{color:ORI_COLOR[src.orientation]||"#555"}}>● {src.orientation}</span>
+                    </div>
                   </div>
-                </div>
+                  <span style={{color:"#333",fontSize:"14px",flexShrink:0}}>↗</span>
+                </a>
               );
             })}
           </div>
@@ -911,6 +949,92 @@ function CitationChip({n, citation, dark}) {
   );
 }
 
+function AskWaitlistCard({dark, session}) {
+  const [email, setEmail] = useState(session?.user?.email || "");
+  const [status, setStatus] = useState("idle"); // idle | loading | done | error
+  const [message, setMessage] = useState("");
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setMessage("Email invalide"); setStatus("error"); return;
+    }
+    setStatus("loading"); setMessage("");
+    try {
+      const res = await fetch(`${API_URL}/api/ask/waitlist`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, feature: ASK_NAME }),
+      });
+      if (!res.ok && res.status !== 409) throw new Error(`HTTP ${res.status}`);
+      setStatus("done");
+      setMessage(res.status === 409 ? "Vous êtes déjà inscrit." : "Inscrit. On vous prévient au lancement.");
+    } catch {
+      try { localStorage.setItem(`mv_waitlist_${ASK_NAME}`, email); } catch {}
+      setStatus("done");
+      setMessage("Inscrit localement. On vous prévient au lancement.");
+    }
+  }
+
+  const card = dark ? "#121212" : "#fafaf8";
+  const border = dark ? "#1f1f1f" : "#e8e6e0";
+  const text = dark ? "#f0ede8" : "#111";
+  const muted = dark ? "#888" : "#666";
+
+  return (
+    <div style={{paddingBottom:"80px",paddingTop:"18px"}}>
+      <div style={{background:card,border:`1px solid ${border}`,borderRadius:"18px",padding:"26px 22px",textAlign:"center"}}>
+        <div style={{display:"inline-block",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.14em",color:"#e74c3c",border:"1px solid #3d1010",background:"#1c0808",padding:"3px 9px",borderRadius:"20px",marginBottom:"14px"}}>BIENTÔT — PREMIUM</div>
+        <div style={{fontSize:"34px",marginBottom:"10px"}}>🔮</div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:"26px",fontWeight:"700",color:text,marginBottom:"8px",letterSpacing:"-0.01em"}}>{ASK_NAME}</div>
+        <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"14.5px",color:muted,maxWidth:"360px",margin:"0 auto 18px",lineHeight:"1.55"}}>
+          Interrogez 20 sources françaises en une question. Comparez les couvertures, détectez les angles morts, visualisez les écarts. Toujours avec citations.
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"7px",maxWidth:"400px",margin:"0 auto 22px"}}>
+          {[
+            {i:"🎯",l:"Comparer"},
+            {i:"⚠️",l:"Angles morts"},
+            {i:"📊",l:"Graphiques"},
+          ].map(({i,l})=>(
+            <div key={l} style={{background:dark?"#0c0c0c":"#fff",border:`1px solid ${border}`,borderRadius:"10px",padding:"10px 6px"}}>
+              <div style={{fontSize:"18px",marginBottom:"3px"}}>{i}</div>
+              <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.06em",color:muted}}>{l}</div>
+            </div>
+          ))}
+        </div>
+
+        {status === "done" ? (
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"11px",color:"#1e8449",padding:"14px"}}>
+            ✓ {message}
+          </div>
+        ) : (
+          <form onSubmit={submit} style={{display:"flex",gap:"7px",maxWidth:"380px",margin:"0 auto"}}>
+            <input
+              type="email"
+              value={email}
+              onChange={(e)=>setEmail(e.target.value)}
+              placeholder="votre@email.fr"
+              disabled={status==="loading"}
+              style={{flex:1,fontFamily:"'Source Serif 4',serif",fontSize:"14px",background:dark?"#0f0f0f":"#fff",border:`1px solid ${border}`,borderRadius:"22px",padding:"10px 14px",color:text,outline:"none"}}
+            />
+            <button type="submit" disabled={status==="loading"} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.1em",background:"#e74c3c",color:"white",border:"none",padding:"0 18px",borderRadius:"22px",cursor:"pointer",opacity:status==="loading"?0.5:1}}>
+              {status==="loading" ? "…" : "M'INSCRIRE"}
+            </button>
+          </form>
+        )}
+        {status === "error" && (
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",color:"#e74c3c",marginTop:"10px"}}>{message}</div>
+        )}
+
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:dark?"#444":"#aaa",marginTop:"16px",letterSpacing:"0.06em"}}>
+          Pas de spam. Prévenu une seule fois, au lancement.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AskMVTab({isPremium, onPremium, dark, session}) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -923,11 +1047,15 @@ function AskMVTab({isPremium, onPremium, dark, session}) {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
+  if (ASK_WAITLIST_MODE) {
+    return <AskWaitlistCard dark={dark} session={session}/>;
+  }
+
   if (!isPremium && !ASK_DEMO_MODE) {
     return (
       <div style={{paddingBottom:"80px",paddingTop:"40px",textAlign:"center"}}>
         <div style={{fontSize:"34px",marginBottom:"14px"}}>🔮</div>
-        <div style={{fontFamily:"'Playfair Display',serif",fontSize:"22px",fontWeight:"700",color:dark?"#f0ede8":"#111",marginBottom:"8px"}}>Ask MV</div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:"22px",fontWeight:"700",color:dark?"#f0ede8":"#111",marginBottom:"8px"}}>{ASK_NAME}</div>
         <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"14px",color:dark?"#888":"#555",maxWidth:"320px",margin:"0 auto 22px",lineHeight:"1.55"}}>
           Posez des questions à nos 40+ sources françaises. Compare les couvertures, détecte les angles morts, génère des graphiques — toujours avec citations.
         </div>
@@ -1060,7 +1188,7 @@ function AskMVTab({isPremium, onPremium, dark, session}) {
   return (
     <div style={{paddingBottom:"140px",minHeight:"calc(100vh - 200px)",display:"flex",flexDirection:"column"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
-        <div style={{fontFamily:"'Playfair Display',serif",fontSize:"18px",fontWeight:"700",color:textColor}}>Ask MV</div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:"18px",fontWeight:"700",color:textColor}}>{ASK_NAME}</div>
         {remaining != null && (
           <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:dark?"#666":"#888"}}>{remaining} restantes</div>
         )}
@@ -1227,12 +1355,7 @@ function FeedTab({isPremium, onPremium}) {
       {loading&&<div style={{width:"22px",height:"22px",border:"2px solid #1f1f1f",borderTopColor:"#e74c3c",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"60px auto"}}/>}
       {error&&<div style={{padding:"14px",background:"#1c0808",border:"1px solid #3d1010",borderRadius:"10px",fontFamily:"'IBM Plex Mono',monospace",fontSize:"11px",color:"#e74c3c"}}>{error}</div>}
 
-      {/* Daily briefing */}
-      {!loading&&stories.length>0&&category==="Tout"&&!search&&(
-        <DailyBriefing stories={filtered} onStoryClick={handleClick} isPremium={isPremium} onPremium={onPremium}/>
-      )}
-
-      {/* Breaking */}
+      {/* Breaking — always on top */}
       {!loading&&breaking.length>0&&(
         <div style={{marginBottom:"16px"}}>
           <div style={{display:"flex",alignItems:"center",gap:"7px",marginBottom:"10px"}}>
@@ -1244,9 +1367,22 @@ function FeedTab({isPremium, onPremium}) {
         </div>
       )}
 
-      {!loading&&!error&&regular.map((s,i)=>(
+      {/* First 3 regular stories */}
+      {!loading&&!error&&regular.slice(0,3).map((s,i)=>(
         <div key={s.id||i} style={{animation:`fadeUp 0.3s ease ${Math.min(i,8)*0.035}s both`}}>
           <StoryCard story={s} onClick={handleClick} locked={!isPremium&&reads+i>=FREE_LIMIT} onLock={()=>setShowPaywall(true)}/>
+        </div>
+      ))}
+
+      {/* Daily briefing — after the first batch of headlines */}
+      {!loading&&stories.length>0&&category==="Tout"&&!search&&(
+        <DailyBriefing stories={filtered} onStoryClick={handleClick} isPremium={isPremium} onPremium={onPremium}/>
+      )}
+
+      {/* Remaining regular stories */}
+      {!loading&&!error&&regular.slice(3).map((s,i)=>(
+        <div key={s.id||(i+3)} style={{animation:`fadeUp 0.3s ease ${Math.min(i+3,8)*0.035}s both`}}>
+          <StoryCard story={s} onClick={handleClick} locked={!isPremium&&reads+i+3>=FREE_LIMIT} onLock={()=>setShowPaywall(true)}/>
         </div>
       ))}
 
@@ -1434,7 +1570,7 @@ function MédiaVueApp() {
   const navItems = [
     {id:"news",icon:"📰",label:"Actualités"},
     {id:"blindspot",icon:"⚠️",label:"Angles morts"},
-    {id:"ask",icon:"🔮",label:"Ask MV"},
+    {id:"ask",icon:"🔮",label:ASK_NAME},
     {id:"sources",icon:"📋",label:"Sources"},
     {id:"profile",icon:"👤",label:"Mon Profil"},
   ];
