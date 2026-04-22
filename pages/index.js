@@ -845,8 +845,70 @@ function AngleMortTab({isPremium, onPremium}) {
   );
 }
 
+// ── Tracker Politique Teaser (waitlist for 2027 présidentielles) ─────────────
+function TrackerPolitiqueTeaser({session, dark}) {
+  const [email, setEmail] = useState(session?.user?.email || "");
+  const [status, setStatus] = useState("idle"); // idle | loading | done | error
+  const [message, setMessage] = useState("");
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setStatus("error"); setMessage("Email invalide"); return;
+    }
+    setStatus("loading"); setMessage("");
+    try {
+      const res = await fetch(`${API_URL}/api/ask/waitlist`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, feature: "tracker_politique" }),
+      });
+      if (!res.ok && res.status !== 409) throw new Error(`HTTP ${res.status}`);
+      setStatus("done");
+      setMessage(res.status === 409 ? "Déjà inscrit." : "Inscrit ✓");
+    } catch {
+      try { localStorage.setItem("mv_waitlist_tracker_politique", email); } catch {}
+      setStatus("done"); setMessage("Inscrit ✓");
+    }
+  }
+
+  return (
+    <div style={{background:"#0a1a0a",border:"1px dashed #1e8449",borderRadius:"12px",padding:"16px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"8px"}}>
+        <span style={{fontSize:"16px"}}>🏛️</span>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#1e8449",letterSpacing:"0.1em",textTransform:"uppercase"}}>Bientôt · Tracker Politique</div>
+      </div>
+      <p style={{fontFamily:"'Source Serif 4',serif",fontSize:"13px",color:"#9abea0",lineHeight:"1.5",margin:"0 0 6px"}}>Tweets des politiciens en temps réel. Disponible pour les Présidentielles 2027.</p>
+      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#4a7a4a",marginBottom:"12px"}}>Macron · Le Pen · Mélenchon · Bardella · +50</div>
+
+      {status === "done" ? (
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",color:"#1e8449",letterSpacing:"0.06em",padding:"8px 0"}}>
+          ✓ {message} — on vous prévient au lancement.
+        </div>
+      ) : (
+        <form onSubmit={submit} style={{display:"flex",gap:"6px"}}>
+          <input
+            type="email"
+            value={email}
+            onChange={(e)=>setEmail(e.target.value)}
+            placeholder="votre@email.fr"
+            disabled={status==="loading"}
+            style={{flex:1,fontFamily:"'Source Serif 4',serif",fontSize:"12px",background:"#061a06",border:"1px solid #1e4a1e",borderRadius:"18px",padding:"8px 12px",color:"#9abea0",outline:"none"}}
+          />
+          <button type="submit" disabled={status==="loading"} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.08em",background:"#1e8449",color:"white",border:"none",padding:"0 14px",borderRadius:"18px",cursor:"pointer",opacity:status==="loading"?0.5:1}}>
+            {status==="loading" ? "…" : "M'INSCRIRE"}
+          </button>
+        </form>
+      )}
+      {status === "error" && (
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#e74c3c",marginTop:"6px"}}>{message}</div>
+      )}
+    </div>
+  );
+}
+
 // ── Profile Tab ───────────────────────────────────────────────────────────────
-function ProfilTab({isPremium, onPremium, dark}) {
+function ProfilTab({isPremium, onPremium, dark, session}) {
   const [profile] = useState(getProfile());
   const total = profile.gauche+profile.centre+profile.droite;
   const gPct = total>0?Math.round((profile.gauche/total)*100):0;
@@ -937,14 +999,7 @@ function ProfilTab({isPremium, onPremium, dark}) {
         </div>
       )}
 
-      <div style={{background:"#0a1a0a",border:"1px dashed #1e8449",borderRadius:"12px",padding:"16px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"8px"}}>
-          <span style={{fontSize:"16px"}}>🏛️</span>
-          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#1e8449",letterSpacing:"0.1em",textTransform:"uppercase"}}>Bientôt · Tracker Politique</div>
-        </div>
-        <p style={{fontFamily:"'Source Serif 4',serif",fontSize:"13px",color:"#2a4a2a",lineHeight:"1.5",margin:"0 0 6px"}}>Tweets des politiciens en temps réel. Disponible pour les Présidentielles 2027.</p>
-        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#1a3a1a"}}>Macron · Le Pen · Mélenchon · Bardella · +50</div>
-      </div>
+      <TrackerPolitiqueTeaser session={session} dark={dark}/>
     </div>
   );
 }
