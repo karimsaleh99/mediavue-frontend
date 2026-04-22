@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
+import Head from "next/head";
 
 const API_URL = "https://mediavue-backend-production.up.railway.app";
 const FREE_LIMIT = 5;
@@ -29,6 +30,10 @@ const STORAGE_KEY = "mv_reads";
 const RESET_KEY = "mv_reset";
 const PROFILE_KEY = "mv_profile";
 const THEME_KEY = "mv_theme";
+const STREAK_KEY = "mv_streak";
+const ONBOARDED_KEY = "mv_onboarded";
+const PWA_DISMISSED_KEY = "mv_pwa_dismissed";
+const REF_CODE_KEY = "mv_ref_code";
 
 // Stripe config
 const STRIPE_PK = "pk_test_51TIeliCNh46FhHW7NcuzCh7D8YE0nIvu8ptqVjHNgYkJg9j9utCvuxTTlcB4C3xGivRfEnWuwmkFSurQ6HdmoVfV00vP1rCMG3";
@@ -231,6 +236,28 @@ function updateProfile(sourceIds) {
     });
     localStorage.setItem(PROFILE_KEY,JSON.stringify(p));
   } catch {}
+}
+function getStreak() {
+  try { return JSON.parse(localStorage.getItem(STREAK_KEY)||'{"count":0,"lastDate":""}'); }
+  catch { return {count:0,lastDate:""}; }
+}
+function bumpStreak() {
+  try {
+    const today = new Date().toDateString();
+    const y = new Date(Date.now()-86400000).toDateString();
+    const s = getStreak();
+    if (s.lastDate === today) return s;
+    const next = { count: s.lastDate === y ? s.count+1 : 1, lastDate: today };
+    localStorage.setItem(STREAK_KEY, JSON.stringify(next));
+    return next;
+  } catch { return {count:0,lastDate:""}; }
+}
+function getReferralCode() {
+  try {
+    let c = localStorage.getItem(REF_CODE_KEY);
+    if (!c) { c = Math.random().toString(36).slice(2,8).toUpperCase(); localStorage.setItem(REF_CODE_KEY,c); }
+    return c;
+  } catch { return "MV" + Math.floor(Math.random()*9999); }
 }
 function getCategoryGradient(category) {
   return CAT_GRADIENTS[category] || CAT_GRADIENTS["default"];
@@ -544,12 +571,26 @@ function StoryCard({story, onClick, locked, onLock}) {
 
 // ── Story Modal ───────────────────────────────────────────────────────────────
 function StoryModal({story, onClose}) {
+  const [shared, setShared] = useState(false);
   if (!story) return null;
   const articles = story.articles||[];
   const cov = story.coverageByOrientation||story.coverage_by_orientation||{};
   const articleImg = getStoryImage(story);
   const gradient = getCategoryGradient(story.category);
   const catIcon = CAT_ICONS[story.category]||CAT_ICONS["default"];
+
+  async function handleShare() {
+    const shareUrl = typeof window !== "undefined" ? window.location.origin + "/?story=" + (story.id||"") : "";
+    const shareData = {
+      title: story.title,
+      text: `${story.title} — vu sous tous les angles sur MédiaVue`,
+      url: shareUrl,
+    };
+    try {
+      if (navigator.share) { await navigator.share(shareData); }
+      else { await navigator.clipboard.writeText(`${story.title}\n${shareUrl}`); setShared(true); setTimeout(()=>setShared(false),1800); }
+    } catch {}
+  }
 
   const gauche = articles.filter(a=>(getSource(a.sourceId||a.source_id)?.orientationScore??3)<=1);
   const centre = articles.filter(a=>{const s=getSource(a.sourceId||a.source_id)?.orientationScore??3;return s>1&&s<4;});
@@ -567,7 +608,12 @@ function StoryModal({story, onClose}) {
               onError={e=>{e.target.style.display="none";}}/>
           )}
           <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.2) 0%,#141414 100%)"}}/>
-          <button onClick={onClose} style={{position:"absolute",top:"14px",right:"14px",background:"rgba(0,0,0,0.5)",backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.1)",color:"white",width:"32px",height:"32px",borderRadius:"50%",cursor:"pointer",fontSize:"14px",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+          <div style={{position:"absolute",top:"14px",right:"14px",display:"flex",gap:"7px"}}>
+            <button onClick={handleShare} title="Partager" style={{background:"rgba(0,0,0,0.5)",backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.1)",color:"white",width:"32px",height:"32px",borderRadius:"50%",cursor:"pointer",fontSize:"13px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              {shared ? "✓" : "↗"}
+            </button>
+            <button onClick={onClose} style={{background:"rgba(0,0,0,0.5)",backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.1)",color:"white",width:"32px",height:"32px",borderRadius:"50%",cursor:"pointer",fontSize:"14px",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+          </div>
           <div style={{position:"absolute",bottom:"14px",left:"16px",display:"flex",alignItems:"center",gap:"8px"}}>
             <span style={{fontSize:"14px"}}>{catIcon}</span>
             <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"rgba(255,255,255,0.6)",letterSpacing:"0.1em",textTransform:"uppercase"}}>{story.category}</span>
@@ -800,7 +846,7 @@ function AngleMortTab({isPremium, onPremium}) {
 }
 
 // ── Profile Tab ───────────────────────────────────────────────────────────────
-function ProfilTab({isPremium, onPremium}) {
+function ProfilTab({isPremium, onPremium, dark}) {
   const [profile] = useState(getProfile());
   const total = profile.gauche+profile.centre+profile.droite;
   const gPct = total>0?Math.round((profile.gauche/total)*100):0;
@@ -823,6 +869,9 @@ function ProfilTab({isPremium, onPremium}) {
         <div style={{fontFamily:"'Playfair Display',serif",fontSize:"16px",fontWeight:"700",color:"#f0ede8",marginBottom:"3px"}}>Mon Profil Médiatique</div>
         <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:isPremium?"#1e8449":"#333",letterSpacing:"0.1em"}}>{isPremium?"● COMPTE PREMIUM":"Compte gratuit"}</div>
       </div>
+
+      <StreakBadge dark={dark}/>
+      <ReferralCard dark={dark}/>
 
       {total===0?(
         <div style={{background:"#161616",border:"1px solid #1f1f1f",borderRadius:"12px",padding:"28px",marginBottom:"12px",textAlign:"center"}}>
@@ -1315,6 +1364,7 @@ function FeedTab({isPremium, onPremium}) {
     setSelected(story);
     updateProfile(story.sourceIds||story.source_ids||[]);
     setReads(incrementReads());
+    bumpStreak();
     if (!story.articles&&story.id){try{setSelected(await (await fetch(`${API_URL}/api/stories/${story.id}`)).json());}catch{}}
   };
 
@@ -1498,6 +1548,183 @@ function AuthScreen({onAuth, dark}) {
   );
 }
 
+// ── Onboarding Modal ──────────────────────────────────────────────────────────
+function OnboardingModal({onDone, dark}) {
+  const [step, setStep] = useState(0);
+  const [picked, setPicked] = useState([]);
+
+  const togglePick = (id) => setPicked(p => p.includes(id) ? p.filter(x=>x!==id) : p.length<5 ? [...p,id] : p);
+
+  const finish = () => {
+    try {
+      localStorage.setItem(ONBOARDED_KEY, "1");
+      if (picked.length > 0) updateProfile(picked);
+    } catch {}
+    onDone();
+  };
+
+  const bg = dark ? "#141414" : "#fff";
+  const border = dark ? "#1f1f1f" : "#e8e6e0";
+  const text = dark ? "#f0ede8" : "#111";
+  const muted = dark ? "#888" : "#666";
+
+  const steps = [
+    {
+      title: "Bienvenue sur MédiaVue",
+      body: "L'actualité française, vue sous tous les angles. Nous agrégeons 20 sources de tous les bords politiques pour vous montrer ce qui est couvert — et ce qui ne l'est pas.",
+      emoji: "📰",
+    },
+    {
+      title: "L'échelle de biais",
+      body: "De gauche à droite, -3 à +3. Chaque source est notée selon une méthodologie basée sur des études académiques (MediaBiasFactCheck, Reporters Sans Frontières). La fiabilité des faits est séparée du positionnement.",
+      emoji: "⚖️",
+      chart: true,
+    },
+    {
+      title: "Choisissez vos médias",
+      body: "Sélectionnez jusqu'à 5 sources que vous lisez déjà. On vous montrera les angles morts par rapport à ces choix.",
+      emoji: "🎯",
+      pick: true,
+    },
+  ];
+
+  const s = steps[step];
+  const isLast = step === steps.length - 1;
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px",backdropFilter:"blur(8px)"}}>
+      <div style={{background:bg,border:`1px solid ${border}`,borderRadius:"18px",maxWidth:"440px",width:"100%",padding:"28px 22px",maxHeight:"90vh",overflowY:"auto"}}>
+        <div style={{display:"flex",gap:"5px",marginBottom:"18px"}}>
+          {steps.map((_,i)=>(<div key={i} style={{flex:1,height:"3px",borderRadius:"2px",background:i<=step?"#e74c3c":border}}/>))}
+        </div>
+        <div style={{textAlign:"center",marginBottom:"16px"}}>
+          <div style={{fontSize:"34px",marginBottom:"8px"}}>{s.emoji}</div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:"22px",fontWeight:"700",color:text,marginBottom:"8px"}}>{s.title}</div>
+          <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"14px",color:muted,lineHeight:"1.55"}}>{s.body}</div>
+        </div>
+
+        {s.chart && (
+          <div style={{padding:"14px",background:dark?"#0c0c0c":"#f6f4ef",borderRadius:"10px",margin:"12px 0"}}>
+            <div style={{display:"flex",justifyContent:"space-between",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:muted,marginBottom:"6px",letterSpacing:"0.08em"}}>
+              <span>GAUCHE -3</span><span>CENTRE</span><span>+3 DROITE</span>
+            </div>
+            <div style={{height:"8px",background:"linear-gradient(90deg, #e74c3c 0%, #888 50%, #3d7ebf 100%)",borderRadius:"4px"}}/>
+          </div>
+        )}
+
+        {s.pick && (
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"7px",margin:"10px 0 14px"}}>
+            {SOURCES.slice(0,12).map(src=>(
+              <button key={src.id} onClick={()=>togglePick(src.id)} style={{background:picked.includes(src.id)?"#1c0808":(dark?"#0f0f0f":"#f6f4ef"),border:`1px solid ${picked.includes(src.id)?"#e74c3c":border}`,borderRadius:"10px",padding:"10px 4px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:"5px"}}>
+                <SrcChip id={src.id} size={28}/>
+                <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"8px",color:picked.includes(src.id)?"#e74c3c":muted,letterSpacing:"0.04em",textAlign:"center"}}>{src.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div style={{display:"flex",gap:"8px",marginTop:"8px"}}>
+          {step>0 && (
+            <button onClick={()=>setStep(step-1)} style={{flex:1,fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.08em",background:"transparent",color:muted,border:`1px solid ${border}`,padding:"11px",borderRadius:"22px",cursor:"pointer"}}>RETOUR</button>
+          )}
+          <button onClick={()=>isLast?finish():setStep(step+1)} style={{flex:2,fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.1em",background:"#e74c3c",color:"white",border:"none",padding:"11px",borderRadius:"22px",cursor:"pointer"}}>
+            {isLast ? "COMMENCER" : "SUIVANT →"}
+          </button>
+        </div>
+        {step===0 && (
+          <button onClick={finish} style={{width:"100%",marginTop:"10px",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",background:"transparent",color:muted,border:"none",cursor:"pointer",letterSpacing:"0.06em"}}>Passer</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── PWA Install Banner ────────────────────────────────────────────────────────
+function PwaInstallBanner({dark}) {
+  const [prompt, setPrompt] = useState(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try { if (localStorage.getItem(PWA_DISMISSED_KEY) === "1") return; } catch {}
+    if (window.matchMedia?.("(display-mode: standalone)")?.matches) return;
+    const handler = (e) => { e.preventDefault(); setPrompt(e); setVisible(true); };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  const dismiss = () => {
+    try { localStorage.setItem(PWA_DISMISSED_KEY, "1"); } catch {}
+    setVisible(false);
+  };
+
+  const install = async () => {
+    if (!prompt) return;
+    prompt.prompt();
+    await prompt.userChoice;
+    setPrompt(null);
+    setVisible(false);
+  };
+
+  if (!visible) return null;
+
+  const bg = dark ? "#141414" : "#fff";
+  const border = dark ? "#1f1f1f" : "#e8e6e0";
+  const text = dark ? "#f0ede8" : "#111";
+
+  return (
+    <div style={{position:"fixed",bottom:"70px",left:"50%",transform:"translateX(-50%)",width:"calc(100% - 26px)",maxWidth:"460px",background:bg,border:`1px solid ${border}`,borderRadius:"14px",padding:"12px 14px",zIndex:300,display:"flex",alignItems:"center",gap:"11px",boxShadow:"0 10px 40px rgba(0,0,0,0.4)"}}>
+      <div style={{fontSize:"22px"}}>📲</div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"13px",color:text,fontWeight:"600"}}>Installer MédiaVue</div>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#888"}}>Ajoutez l'app à votre écran d'accueil</div>
+      </div>
+      <button onClick={install} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",background:"#e74c3c",color:"white",border:"none",padding:"7px 12px",borderRadius:"20px",cursor:"pointer",letterSpacing:"0.06em"}}>INSTALLER</button>
+      <button onClick={dismiss} style={{background:"transparent",border:"none",color:"#555",fontSize:"16px",cursor:"pointer",padding:"4px"}}>✕</button>
+    </div>
+  );
+}
+
+// ── Streak + Referral cards (Profile additions) ───────────────────────────────
+function StreakBadge({dark}) {
+  const [streak] = useState(getStreak);
+  if (!streak.count) return null;
+  const bg = dark ? "#161616" : "#fff";
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:"10px",background:bg,border:`1px solid ${dark?"#1f1f1f":"#e8e6e0"}`,borderRadius:"12px",padding:"13px 16px",marginBottom:"12px"}}>
+      <div style={{fontSize:"22px"}}>🔥</div>
+      <div style={{flex:1}}>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:"17px",fontWeight:"700",color:dark?"#f0ede8":"#111"}}>{streak.count} jour{streak.count>1?"s":""} de suite</div>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#888",letterSpacing:"0.06em"}}>Continuez pour garder votre série</div>
+      </div>
+    </div>
+  );
+}
+
+function ReferralCard({dark}) {
+  const [code] = useState(getReferralCode);
+  const [copied, setCopied] = useState(false);
+  const url = typeof window !== "undefined" ? `${window.location.origin}?ref=${code}` : `?ref=${code}`;
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(()=>setCopied(false),1600); } catch {}
+  };
+  const bg = dark ? "#161616" : "#fff";
+  return (
+    <div style={{background:bg,border:`1px solid ${dark?"#1f1f1f":"#e8e6e0"}`,borderRadius:"12px",padding:"16px",marginBottom:"12px"}}>
+      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#333",letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:"10px"}}>Inviter un ami</div>
+      <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"13px",color:dark?"#888":"#555",marginBottom:"12px",lineHeight:"1.5"}}>
+        Partagez votre lien. Chaque ami qui rejoint vous offre +5 lectures gratuites par jour.
+      </div>
+      <div style={{display:"flex",gap:"7px"}}>
+        <input readOnly value={url} style={{flex:1,fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",background:dark?"#0f0f0f":"#f6f4ef",border:`1px solid ${dark?"#222":"#e0e0e0"}`,color:dark?"#888":"#555",padding:"9px 11px",borderRadius:"18px",outline:"none"}}/>
+        <button onClick={copy} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.08em",background:"#e74c3c",color:"white",border:"none",padding:"0 16px",borderRadius:"18px",cursor:"pointer"}}>
+          {copied ? "COPIÉ ✓" : "COPIER"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 function MédiaVueApp() {
   const [tab, setTab] = useState("news");
@@ -1507,11 +1734,15 @@ function MédiaVueApp() {
   const [showAuth, setShowAuth] = useState(false);
   const [dark, setDark] = useState(true);
   const [authChecked, setAuthChecked] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   // Load theme + session on mount
   useEffect(() => {
     const savedTheme = localStorage.getItem(THEME_KEY);
     if (savedTheme !== null) setDark(savedTheme === "dark");
+    try {
+      if (!localStorage.getItem(ONBOARDED_KEY)) setShowOnboarding(true);
+    } catch {}
 
     // Check if returning from Google OAuth (session in URL hash)
     const urlSession = parseSessionFromUrl();
@@ -1580,6 +1811,17 @@ function MédiaVueApp() {
 
   return (
     <>
+      <Head>
+        <title>MédiaVue — L'actualité française, vue sous tous les angles</title>
+        <meta name="description" content="Agrégateur de 20+ médias français avec détection des biais et angles morts."/>
+        <meta name="theme-color" content="#e74c3c"/>
+        <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+        <link rel="manifest" href="/manifest.json"/>
+        <link rel="apple-touch-icon" href="/favicon.ico"/>
+        <meta name="apple-mobile-web-app-capable" content="yes"/>
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+        <meta name="apple-mobile-web-app-title" content="MédiaVue"/>
+      </Head>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;600&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
@@ -1634,6 +1876,8 @@ function MédiaVueApp() {
         </nav>
       </div>
       {showPaywall&&<PaywallModal onClose={()=>setShowPaywall(false)} onPremium={handlePremium} session={session}/>}
+      {showOnboarding&&<OnboardingModal onDone={()=>setShowOnboarding(false)} dark={dark}/>}
+      <PwaInstallBanner dark={dark}/>
     </>
   );
 }
