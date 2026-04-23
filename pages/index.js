@@ -153,13 +153,18 @@ const CAT_GRADIENTS = {
   "Médias":       "linear-gradient(135deg,#0a1a1a 0%,#0d2626 50%,#0f3333 100%)",
   "Technologie":  "linear-gradient(135deg,#0a0a1a 0%,#10102e 50%,#1a1a4a 100%)",
   "Environnement":"linear-gradient(135deg,#0a1a0a 0%,#0d2010 50%,#0f3015 100%)",
+  "Sport":        "linear-gradient(135deg,#0a1f1a 0%,#10362a 50%,#1a5a3f 100%)",
+  "Culture":      "linear-gradient(135deg,#1f0a1a 0%,#361028 50%,#5a1a44 100%)",
+  "Faits divers": "linear-gradient(135deg,#1a0a0a 0%,#261010 50%,#3d1818 100%)",
   "default":      "linear-gradient(135deg,#111 0%,#1a1a1a 50%,#222 100%)",
 };
 
 const CAT_ICONS = {
   "Politique": "🏛️", "Économie": "📈", "International": "🌍",
   "Social": "🤝", "Justice": "⚖️", "Médias": "📺",
-  "Technologie": "💻", "Environnement": "🌿", "default": "📰",
+  "Technologie": "💻", "Environnement": "🌿",
+  "Sport": "⚽", "Culture": "🎭", "Faits divers": "🚨",
+  "default": "📰",
 };
 
 const SOURCES = [
