@@ -34,6 +34,34 @@ const STREAK_KEY = "mv_streak";
 const ONBOARDED_KEY = "mv_onboarded";
 const PWA_DISMISSED_KEY = "mv_pwa_dismissed";
 const REF_CODE_KEY = "mv_ref_code";
+const INTERESTS_KEY = "mv_interests";
+
+// Well-known French politicians users can follow.
+// `aliases`: matched against article titles/summaries.
+// `wiki`: French Wikipedia article slug — used to fetch the official portrait
+//         from the Wikimedia REST API at runtime (cached in localStorage).
+const POLITICIANS = [
+  { id: "macron", name: "Emmanuel Macron", role: "Président", party: "Renaissance", color: "#ffd700", aliases: ["macron"], wiki: "Emmanuel_Macron" },
+  { id: "lepen", name: "Marine Le Pen", role: "Députée RN", party: "Rassemblement National", color: "#0d1d54", aliases: ["marine le pen", "le pen"], wiki: "Marine_Le_Pen" },
+  { id: "melenchon", name: "Jean-Luc Mélenchon", role: "LFI", party: "La France Insoumise", color: "#cc0000", aliases: ["mélenchon", "melenchon"], wiki: "Jean-Luc_Mélenchon" },
+  { id: "bardella", name: "Jordan Bardella", role: "Président RN", party: "Rassemblement National", color: "#0d1d54", aliases: ["bardella"], wiki: "Jordan_Bardella" },
+  { id: "philippe", name: "Édouard Philippe", role: "Horizons", party: "Horizons", color: "#0099cc", aliases: ["édouard philippe", "edouard philippe"], wiki: "Édouard_Philippe" },
+  { id: "attal", name: "Gabriel Attal", role: "Renaissance", party: "Renaissance", color: "#ffd700", aliases: ["gabriel attal", "attal"], wiki: "Gabriel_Attal" },
+  { id: "ruffin", name: "François Ruffin", role: "Député", party: "Picardie Debout", color: "#e74c3c", aliases: ["françois ruffin", "francois ruffin", "ruffin"], wiki: "François_Ruffin" },
+  { id: "bompard", name: "Manuel Bompard", role: "LFI", party: "La France Insoumise", color: "#cc0000", aliases: ["bompard"], wiki: "Manuel_Bompard" },
+  { id: "faure", name: "Olivier Faure", role: "PS", party: "Parti Socialiste", color: "#e74c3c", aliases: ["olivier faure"], wiki: "Olivier_Faure_(homme_politique)" },
+  { id: "tondelier", name: "Marine Tondelier", role: "Écologistes", party: "Les Écologistes", color: "#1e8449", aliases: ["tondelier"], wiki: "Marine_Tondelier" },
+  { id: "roussel", name: "Fabien Roussel", role: "PCF", party: "Parti Communiste Français", color: "#c0392b", aliases: ["fabien roussel", "roussel"], wiki: "Fabien_Roussel" },
+  { id: "ciotti", name: "Éric Ciotti", role: "UDR", party: "Union des droites", color: "#1a5276", aliases: ["éric ciotti", "eric ciotti", "ciotti"], wiki: "Éric_Ciotti" },
+  { id: "retailleau", name: "Bruno Retailleau", role: "LR", party: "Les Républicains", color: "#1a5276", aliases: ["bruno retailleau", "retailleau"], wiki: "Bruno_Retailleau" },
+  { id: "bayrou", name: "François Bayrou", role: "MoDem / Premier ministre", party: "MoDem", color: "#ff8c00", aliases: ["françois bayrou", "francois bayrou", "bayrou"], wiki: "François_Bayrou" },
+  { id: "lecornu", name: "Sébastien Lecornu", role: "Renaissance", party: "Renaissance", color: "#ffd700", aliases: ["sébastien lecornu", "sebastien lecornu", "lecornu"], wiki: "Sébastien_Lecornu" },
+  { id: "braunpivet", name: "Yaël Braun-Pivet", role: "Présidente Assemblée", party: "Renaissance", color: "#ffd700", aliases: ["braun-pivet", "braun pivet"], wiki: "Yaël_Braun-Pivet" },
+  { id: "lemaire", name: "Bruno Le Maire", role: "Renaissance", party: "Renaissance", color: "#ffd700", aliases: ["bruno le maire", "le maire"], wiki: "Bruno_Le_Maire" },
+  { id: "borne", name: "Élisabeth Borne", role: "Renaissance", party: "Renaissance", color: "#ffd700", aliases: ["élisabeth borne", "elisabeth borne", "borne"], wiki: "Élisabeth_Borne" },
+  { id: "zemmour", name: "Éric Zemmour", role: "Reconquête", party: "Reconquête", color: "#222", aliases: ["éric zemmour", "eric zemmour", "zemmour"], wiki: "Éric_Zemmour" },
+  { id: "dupontaignan", name: "Nicolas Dupont-Aignan", role: "DLF", party: "Debout la France", color: "#0d1d54", aliases: ["dupont-aignan"], wiki: "Nicolas_Dupont-Aignan" },
+];
 
 // Stripe config
 const STRIPE_PK = "pk_test_51TIeliCNh46FhHW7NcuzCh7D8YE0nIvu8ptqVjHNgYkJg9j9utCvuxTTlcB4C3xGivRfEnWuwmkFSurQ6HdmoVfV00vP1rCMG3";
@@ -190,7 +218,7 @@ const SOURCES = [
   { id: "lexpress", name: "L'Express", orientation: "centre-droite", orientationScore: 4, factuality: "Élevée", owner: "Alain Weill / Altice", ownerType: "milliardaire télécom", logo: "EXP", color: "#922b21" },
 ];
 
-const CATEGORIES = ["Tout", "Politique", "Économie", "Social", "International", "Justice", "Médias", "Technologie", "Environnement"];
+const CATEGORIES = ["Tout", "Politique", "Économie", "International", "Social", "Justice", "Sport", "Culture", "Faits divers", "Médias", "Technologie", "Environnement"];
 
 const ORI_COLOR = {
   "gauche": "#e74c3c", "centre-gauche": "#e67e22", "centre": "#7f8c8d",
@@ -263,6 +291,19 @@ function getReferralCode() {
     if (!c) { c = Math.random().toString(36).slice(2,8).toUpperCase(); localStorage.setItem(REF_CODE_KEY,c); }
     return c;
   } catch { return "MV" + Math.floor(Math.random()*9999); }
+}
+function getInterests() {
+  try { return JSON.parse(localStorage.getItem(INTERESTS_KEY) || "[]"); }
+  catch { return []; }
+}
+function saveInterests(ids) {
+  try { localStorage.setItem(INTERESTS_KEY, JSON.stringify(ids)); } catch {}
+}
+// True if the article mentions any followed politician's alias.
+function storyMatchesInterests(story, interestIds) {
+  if (!interestIds.length) return true;
+  const text = `${story.title || ""} ${story.summary || ""}`.toLowerCase();
+  return POLITICIANS.some(p => interestIds.includes(p.id) && p.aliases.some(a => text.includes(a)));
 }
 function getCategoryGradient(category) {
   return CAT_GRADIENTS[category] || CAT_GRADIENTS["default"];
@@ -846,6 +887,161 @@ function AngleMortTab({isPremium, onPremium}) {
         </div>
       ))}
       {selected&&<StoryModal story={selected} onClose={()=>setSelected(null)}/>}
+    </div>
+  );
+}
+
+// ── Politician avatar — Wikipedia thumbnail with initials fallback ──────────
+function PoliticianAvatar({politician, size=26}) {
+  const [src, setSrc] = useState(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!politician.wiki) return;
+    const cacheKey = `mv_avatar_${politician.id}`;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached === "FAILED") { setFailed(true); return; }
+      if (cached) { setSrc(cached); return; }
+    } catch {}
+    fetch(`https://fr.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(politician.wiki)}`)
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => {
+        const url = d.thumbnail?.source || d.originalimage?.source;
+        if (url) { setSrc(url); try { localStorage.setItem(cacheKey, url); } catch {} }
+        else { setFailed(true); try { localStorage.setItem(cacheKey, "FAILED"); } catch {} }
+      })
+      .catch(() => setFailed(true));
+  }, [politician.id, politician.wiki]);
+
+  if (src && !failed) {
+    return (
+      <img
+        src={src}
+        alt={politician.name}
+        onError={() => setFailed(true)}
+        style={{width:size,height:size,borderRadius:"50%",objectFit:"cover",background:politician.color,flexShrink:0}}
+      />
+    );
+  }
+  return (
+    <div style={{width:size,height:size,borderRadius:"50%",background:politician.color,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'IBM Plex Mono',monospace",fontSize:Math.max(7,size*0.3),color:"white",fontWeight:"700",flexShrink:0}}>
+      {politician.name.split(" ").map(w=>w[0]).join("").slice(0,2)}
+    </div>
+  );
+}
+
+// ── Politician picker (used by InterestsTab and the empty state) ─────────────
+function PoliticianPicker({selected, onToggle, dark}) {
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:"7px"}}>
+      {POLITICIANS.map(p=>{
+        const active = selected.includes(p.id);
+        return (
+          <button key={p.id} onClick={()=>onToggle(p.id)} style={{display:"flex",alignItems:"center",gap:"9px",background:active?"#1c0808":(dark?"#0f0f0f":"#fff"),border:`1px solid ${active?"#e74c3c":(dark?"#1f1f1f":"#e8e6e0")}`,borderRadius:"10px",padding:"9px 11px",cursor:"pointer",textAlign:"left"}}>
+            <PoliticianAvatar politician={p} size={32}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"12px",color:active?"#e74c3c":(dark?"#d4cfc2":"#111"),fontWeight:"600",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
+              <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"8px",color:"#888",letterSpacing:"0.04em",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.role}</div>
+            </div>
+            {active && <span style={{color:"#e74c3c",fontSize:"12px"}}>✓</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Interests Tab ─────────────────────────────────────────────────────────────
+function InterestsTab({isPremium, onPremium, dark, session}) {
+  const [interests, setInterests] = useState(getInterests);
+  const [picking, setPicking] = useState(false);
+  const [stories, setStories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`${API_URL}/api/stories?limit=50`)
+      .then(r=>r.json())
+      .then(d=>{setStories(d.stories||[]);setLoading(false);})
+      .catch(()=>setLoading(false));
+  }, []);
+
+  const toggle = (id) => {
+    const next = interests.includes(id) ? interests.filter(x=>x!==id) : [...interests, id];
+    setInterests(next);
+    saveInterests(next);
+  };
+
+  const filtered = stories.filter(s => storyMatchesInterests(s, interests));
+  const followedCount = interests.length;
+
+  // Empty state — no interests picked yet, or user wants to edit
+  if (followedCount === 0 || picking) {
+    return (
+      <div style={{paddingBottom:"80px"}}>
+        <div style={{textAlign:"center",marginBottom:"18px",paddingTop:"8px"}}>
+          <div style={{fontSize:"28px",marginBottom:"6px"}}>⭐</div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:"19px",fontWeight:"700",color:dark?"#f0ede8":"#111",marginBottom:"5px"}}>
+            {followedCount === 0 ? "Personnalisez votre fil" : "Modifier vos intérêts"}
+          </div>
+          <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"13.5px",color:dark?"#888":"#666",maxWidth:"360px",margin:"0 auto",lineHeight:"1.5"}}>
+            Suivez les figures politiques qui vous intéressent. Votre fil ne montrera que les histoires qui les mentionnent.
+          </div>
+        </div>
+
+        <PoliticianPicker selected={interests} onToggle={toggle} dark={dark}/>
+
+        {followedCount > 0 && (
+          <button onClick={()=>setPicking(false)} style={{position:"fixed",bottom:"75px",left:"50%",transform:"translateX(-50%)",fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.1em",background:"#e74c3c",color:"white",border:"none",padding:"11px 28px",borderRadius:"22px",cursor:"pointer",boxShadow:"0 4px 18px rgba(231,76,60,0.4)",zIndex:50}}>
+            VOIR MON FIL ({followedCount})
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Populated state — show filtered feed
+  return (
+    <div style={{paddingBottom:"80px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
+        <div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:"17px",fontWeight:"700",color:dark?"#f0ede8":"#111"}}>Mon fil personnalisé</div>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#888",letterSpacing:"0.06em"}}>
+            {followedCount} suivi{followedCount>1?"s":""} · {filtered.length} histoire{filtered.length!==1?"s":""}
+          </div>
+        </div>
+        <button onClick={()=>setPicking(true)} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.08em",background:"transparent",color:dark?"#888":"#555",border:`1px solid ${dark?"#222":"#ddd"}`,padding:"6px 11px",borderRadius:"18px",cursor:"pointer"}}>MODIFIER</button>
+      </div>
+
+      {/* Avatars of followed politicians */}
+      <div style={{display:"flex",gap:"6px",overflowX:"auto",marginBottom:"14px",paddingBottom:"4px"}}>
+        {POLITICIANS.filter(p=>interests.includes(p.id)).map(p=>(
+          <div key={p.id} title={p.name} style={{display:"flex",alignItems:"center",gap:"5px",padding:"3px 10px 3px 3px",background:dark?"#161616":"#fff",border:`1px solid ${dark?"#1f1f1f":"#e8e6e0"}`,borderRadius:"18px",flexShrink:0}}>
+            <PoliticianAvatar politician={p} size={22}/>
+            <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:dark?"#aaa":"#555",whiteSpace:"nowrap"}}>{p.name.split(" ").pop()}</span>
+          </div>
+        ))}
+      </div>
+
+      {loading && <div style={{width:"22px",height:"22px",border:"2px solid #1f1f1f",borderTopColor:"#e74c3c",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"60px auto"}}/>}
+
+      {!loading && filtered.length === 0 && (
+        <div style={{textAlign:"center",padding:"40px 20px"}}>
+          <div style={{fontSize:"24px",marginBottom:"8px"}}>🔍</div>
+          <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"14px",color:dark?"#888":"#666",lineHeight:"1.5"}}>
+            Aucune histoire ne mentionne vos personnalités suivies pour l'instant. Revenez plus tard.
+          </div>
+        </div>
+      )}
+
+      {!loading && filtered.map((s,i)=>(
+        <div key={s.id||i} style={{animation:`fadeUp 0.3s ease ${Math.min(i,8)*0.035}s both`}}>
+          <StoryCard story={s} onClick={(story)=>{setSelected(story);bumpStreak();updateProfile(story.sourceIds||story.source_ids||[]);}} locked={false} onLock={()=>{}}/>
+        </div>
+      ))}
+
+      {selected && <StoryModal story={selected} onClose={()=>setSelected(null)}/>}
     </div>
   );
 }
@@ -1860,10 +2056,10 @@ function MédiaVueApp() {
 
   const navItems = [
     {id:"news",icon:"📰",label:"Actualités"},
+    {id:"interests",icon:"⭐",label:"Intérêts"},
     {id:"blindspot",icon:"⚠️",label:"Angles morts"},
     {id:"ask",icon:"🔮",label:ASK_NAME},
-    {id:"sources",icon:"📋",label:"Sources"},
-    {id:"profile",icon:"👤",label:"Mon Profil"},
+    {id:"profile",icon:"👤",label:"Profil"},
   ];
 
   if (!authChecked) return null;
@@ -1919,6 +2115,7 @@ function MédiaVueApp() {
 
         <div style={{padding:"13px 13px 0"}}>
           {tab==="news"&&<FeedTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark}/>}
+          {tab==="interests"&&<InterestsTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark} session={session}/>}
           {tab==="blindspot"&&<AngleMortTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark}/>}
           {tab==="ask"&&<AskMVTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark} session={session}/>}
           {tab==="sources"&&<SourcesTab dark={dark}/>}
