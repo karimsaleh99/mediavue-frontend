@@ -35,6 +35,7 @@ const ONBOARDED_KEY = "mv_onboarded";
 const PWA_DISMISSED_KEY = "mv_pwa_dismissed";
 const REF_CODE_KEY = "mv_ref_code";
 const INTERESTS_KEY = "mv_interests";
+const FOLLOWED_SOURCES_KEY = "mv_followed_sources";
 
 // Well-known French politicians users can follow.
 // `aliases`: matched against article titles/summaries.
@@ -298,6 +299,13 @@ function getInterests() {
 }
 function saveInterests(ids) {
   try { localStorage.setItem(INTERESTS_KEY, JSON.stringify(ids)); } catch {}
+}
+function getFollowedSources() {
+  try { return JSON.parse(localStorage.getItem(FOLLOWED_SOURCES_KEY) || "[]"); }
+  catch { return []; }
+}
+function saveFollowedSources(ids) {
+  try { localStorage.setItem(FOLLOWED_SOURCES_KEY, JSON.stringify(ids)); } catch {}
 }
 // True if the article mentions any followed politician's alias.
 function storyMatchesInterests(story, interestIds) {
@@ -951,10 +959,78 @@ function PoliticianPicker({selected, onToggle, dark}) {
   );
 }
 
-// ── Interests Tab ─────────────────────────────────────────────────────────────
-function InterestsTab({isPremium, onPremium, dark, session}) {
+// ── Trending Card (stories + politicians gaining traction, inserted in feed) ──
+function TrendingCard({stories, interests, onFollowPolitician, onStoryClick, dark}) {
+  // Top 3 most-covered stories (proxy for "trending")
+  const trendingStories = [...stories]
+    .sort((a,b) => (b.coverageCount||b.coverage_count||0) - (a.coverageCount||a.coverage_count||0))
+    .slice(0, 3);
+
+  // Politicians ranked by mention frequency across the current stories
+  const mentionCounts = POLITICIANS.map(p => ({
+    politician: p,
+    count: stories.filter(s => {
+      const text = `${s.title || ""} ${s.summary || ""}`.toLowerCase();
+      return p.aliases.some(a => text.includes(a));
+    }).length,
+  })).filter(x => x.count > 0).sort((a,b) => b.count - a.count).slice(0, 5);
+
+  if (trendingStories.length === 0 && mentionCounts.length === 0) return null;
+
+  const cardBg = dark ? "#121212" : "#fafaf8";
+  const border = dark ? "#1f1f1f" : "#e8e6e0";
+
+  return (
+    <div style={{background:cardBg,border:`1px solid ${border}`,borderRadius:"14px",padding:"16px",marginBottom:"14px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:"7px",marginBottom:"14px"}}>
+        <span style={{fontSize:"14px"}}>🔥</span>
+        <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.12em",textTransform:"uppercase",color:"#e74c3c"}}>Tendances</span>
+      </div>
+
+      {trendingStories.length > 0 && (
+        <>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#888",letterSpacing:"0.08em",marginBottom:"10px"}}>TOP HISTOIRES</div>
+          {trendingStories.map((s,i) => (
+            <button key={s.id||i} onClick={()=>onStoryClick(s)} style={{display:"flex",gap:"11px",alignItems:"center",width:"100%",background:"transparent",border:"none",padding:"9px 0",borderBottom:i<trendingStories.length-1?`1px solid ${border}`:"none",cursor:"pointer",textAlign:"left"}}>
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:"22px",fontWeight:"900",color:"#e74c3c",width:"24px",flexShrink:0}}>{i+1}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"13px",color:dark?"#d4cfc2":"#111",lineHeight:"1.4",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden",marginBottom:"4px"}}>{s.title}</div>
+                <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#888"}}>{s.coverageCount||s.coverage_count||0} sources · {s.category}</div>
+              </div>
+            </button>
+          ))}
+        </>
+      )}
+
+      {mentionCounts.length > 0 && (
+        <>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#888",letterSpacing:"0.08em",marginTop:trendingStories.length>0?"14px":"0",marginBottom:"10px"}}>PERSONNALITÉS EN VEDETTE</div>
+          <div style={{display:"flex",gap:"7px",overflowX:"auto",paddingBottom:"3px"}}>
+            {mentionCounts.map(({politician, count}) => {
+              const followed = interests.includes(politician.id);
+              return (
+                <button key={politician.id} onClick={()=>onFollowPolitician(politician.id)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"5px",background:followed?"#1c0808":"transparent",border:`1px solid ${followed?"#e74c3c":border}`,borderRadius:"10px",padding:"9px 10px",cursor:"pointer",minWidth:"78px",flexShrink:0}}>
+                  <PoliticianAvatar politician={politician} size={36}/>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"8px",color:followed?"#e74c3c":(dark?"#aaa":"#555"),letterSpacing:"0.04em",textAlign:"center",whiteSpace:"nowrap"}}>{politician.name.split(" ").pop()}</div>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"8px",color:"#666"}}>{count} article{count>1?"s":""}</div>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"7px",letterSpacing:"0.08em",color:followed?"#e74c3c":"#888"}}>{followed ? "✓ SUIVI" : "+ SUIVRE"}</div>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Suivre Tab (merged Politiciens + Sources with follow toggles) ────────────
+function SuivreTab({isPremium, onPremium, dark, session}) {
+  const [view, setView] = useState("politiciens"); // "politiciens" | "sources"
   const [interests, setInterests] = useState(getInterests);
+  const [followedSources, setFollowedSources] = useState(getFollowedSources);
   const [picking, setPicking] = useState(false);
+  const [sourceFilter, setSourceFilter] = useState("all");
   const [stories, setStories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
@@ -972,18 +1048,78 @@ function InterestsTab({isPremium, onPremium, dark, session}) {
     setInterests(next);
     saveInterests(next);
   };
+  const toggleSource = (id) => {
+    const next = followedSources.includes(id) ? followedSources.filter(x=>x!==id) : [...followedSources, id];
+    setFollowedSources(next);
+    saveFollowedSources(next);
+  };
 
   const filtered = stories.filter(s => storyMatchesInterests(s, interests));
   const followedCount = interests.length;
+  const sourcesFiltered = sourceFilter==="all" ? SOURCES : SOURCES.filter(s=>{
+    const score = s.orientationScore;
+    return sourceFilter==="gauche"?score<=1:sourceFilter==="centre"?score>1&&score<4:score>=4;
+  });
+
+  const segBtn = (id, label, count) => {
+    const active = view === id;
+    return (
+      <button onClick={()=>{setView(id);setPicking(false);}} style={{flex:1,fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.08em",padding:"9px",background:active?"#1c0808":(dark?"#0f0f0f":"#fff"),color:active?"#e74c3c":(dark?"#888":"#555"),border:`1px solid ${active?"#e74c3c":(dark?"#1f1f1f":"#e8e6e0")}`,borderRadius:"22px",cursor:"pointer"}}>
+        {label}{count>0 && <span style={{opacity:0.7}}> · {count}</span>}
+      </button>
+    );
+  };
+
+  // Sources view
+  if (view === "sources") {
+    return (
+      <div style={{paddingBottom:"80px"}}>
+        <div style={{display:"flex",gap:"6px",marginBottom:"14px"}}>
+          {segBtn("politiciens","POLITICIENS",interests.length)}
+          {segBtn("sources","SOURCES",followedSources.length)}
+        </div>
+        <div style={{display:"flex",gap:"6px",marginBottom:"12px",overflowX:"auto"}}>
+          {["all","gauche","centre","droite"].map(f=>(
+            <button key={f} onClick={()=>setSourceFilter(f)} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",padding:"5px 12px",border:"1px solid",borderColor:sourceFilter===f?"#e74c3c":(dark?"#1f1f1f":"#e8e6e0"),background:sourceFilter===f?"#1c0808":(dark?"#161616":"#fff"),color:sourceFilter===f?"#e74c3c":(dark?"#3a3a3a":"#888"),cursor:"pointer",borderRadius:"20px",whiteSpace:"nowrap"}}>
+              {f==="all"?"Tous":f}
+            </button>
+          ))}
+        </div>
+        {sourcesFiltered.map(src=>{
+          const isFollowed = followedSources.includes(src.id);
+          return (
+            <div key={src.id} style={{background:dark?"#161616":"#fff",border:`1px solid ${isFollowed?"#e74c3c40":(dark?"#1f1f1f":"#e8e6e0")}`,borderRadius:"12px",padding:"13px 15px",marginBottom:"7px",display:"flex",gap:"12px",alignItems:"center"}}>
+              <SrcChip id={src.id} size={40}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:"14px",fontWeight:"700",color:dark?"#f0ede8":"#111",marginBottom:"3px"}}>{src.name}</div>
+                <div style={{display:"flex",gap:"7px",flexWrap:"wrap",alignItems:"center",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px"}}>
+                  <span style={{color:ORI_COLOR[src.orientation]||"#555"}}>● {src.orientation}</span>
+                  <span style={{color:"#555"}}>·</span>
+                  <span style={{color:"#555"}}>{src.owner?.split(" ").slice(0,3).join(" ")}</span>
+                </div>
+              </div>
+              <button onClick={()=>toggleSource(src.id)} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.06em",padding:"7px 12px",border:`1px solid ${isFollowed?"#e74c3c":(dark?"#222":"#ddd")}`,background:isFollowed?"#e74c3c":"transparent",color:isFollowed?"white":(dark?"#888":"#555"),borderRadius:"16px",cursor:"pointer",flexShrink:0}}>
+                {isFollowed ? "✓ SUIVI" : "+ SUIVRE"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 
   // Empty state — no interests picked yet, or user wants to edit
   if (followedCount === 0 || picking) {
     return (
       <div style={{paddingBottom:"80px"}}>
-        <div style={{textAlign:"center",marginBottom:"18px",paddingTop:"8px"}}>
+        <div style={{display:"flex",gap:"6px",marginBottom:"16px"}}>
+          {segBtn("politiciens","POLITICIENS",interests.length)}
+          {segBtn("sources","SOURCES",followedSources.length)}
+        </div>
+        <div style={{textAlign:"center",marginBottom:"18px"}}>
           <div style={{fontSize:"28px",marginBottom:"6px"}}>⭐</div>
           <div style={{fontFamily:"'Playfair Display',serif",fontSize:"19px",fontWeight:"700",color:dark?"#f0ede8":"#111",marginBottom:"5px"}}>
-            {followedCount === 0 ? "Personnalisez votre fil" : "Modifier vos intérêts"}
+            {followedCount === 0 ? "Personnalisez votre fil" : "Modifier vos personnalités"}
           </div>
           <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"13.5px",color:dark?"#888":"#666",maxWidth:"360px",margin:"0 auto",lineHeight:"1.5"}}>
             Suivez les figures politiques qui vous intéressent. Votre fil ne montrera que les histoires qui les mentionnent.
@@ -1004,6 +1140,10 @@ function InterestsTab({isPremium, onPremium, dark, session}) {
   // Populated state — show filtered feed
   return (
     <div style={{paddingBottom:"80px"}}>
+      <div style={{display:"flex",gap:"6px",marginBottom:"14px"}}>
+        {segBtn("politiciens","POLITICIENS",interests.length)}
+        {segBtn("sources","SOURCES",followedSources.length)}
+      </div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
         <div>
           <div style={{fontFamily:"'Playfair Display',serif",fontSize:"17px",fontWeight:"700",color:dark?"#f0ede8":"#111"}}>Mon fil personnalisé</div>
@@ -1591,7 +1731,7 @@ function SourcesTab() {
 }
 
 // ── Feed Tab ──────────────────────────────────────────────────────────────────
-function FeedTab({isPremium, onPremium}) {
+function FeedTab({isPremium, onPremium, dark}) {
   const [stories, setStories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1600,6 +1740,7 @@ function FeedTab({isPremium, onPremium}) {
   const [selected, setSelected] = useState(null);
   const [showPaywall, setShowPaywall] = useState(false);
   const [reads, setReads] = useState(getReadsToday);
+  const [interests, setInterests] = useState(getInterests);
 
   useEffect(()=>{
     setLoading(true);
@@ -1683,6 +1824,21 @@ function FeedTab({isPremium, onPremium}) {
       {/* Daily briefing — after the first batch of headlines */}
       {!loading&&stories.length>0&&category==="Tout"&&!search&&(
         <DailyBriefing stories={filtered} onStoryClick={handleClick} isPremium={isPremium} onPremium={onPremium}/>
+      )}
+
+      {/* Trending — stories + politicians gaining traction */}
+      {!loading&&stories.length>0&&!search&&(
+        <TrendingCard
+          stories={filtered}
+          interests={interests}
+          onFollowPolitician={(id)=>{
+            const next = interests.includes(id) ? interests.filter(x=>x!==id) : [...interests, id];
+            setInterests(next);
+            saveInterests(next);
+          }}
+          onStoryClick={handleClick}
+          dark={dark}
+        />
       )}
 
       {/* Remaining regular stories */}
@@ -2056,7 +2212,7 @@ function MédiaVueApp() {
 
   const navItems = [
     {id:"news",icon:"📰",label:"Actualités"},
-    {id:"interests",icon:"⭐",label:"Intérêts"},
+    {id:"suivre",icon:"⭐",label:"Suivre"},
     {id:"blindspot",icon:"⚠️",label:"Angles morts"},
     {id:"ask",icon:"🔮",label:ASK_NAME},
     {id:"profile",icon:"👤",label:"Profil"},
@@ -2115,10 +2271,9 @@ function MédiaVueApp() {
 
         <div style={{padding:"13px 13px 0"}}>
           {tab==="news"&&<FeedTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark}/>}
-          {tab==="interests"&&<InterestsTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark} session={session}/>}
+          {tab==="suivre"&&<SuivreTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark} session={session}/>}
           {tab==="blindspot"&&<AngleMortTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark}/>}
           {tab==="ask"&&<AskMVTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark} session={session}/>}
-          {tab==="sources"&&<SourcesTab dark={dark}/>}
           {tab==="profile"&&<ProfilTab isPremium={isPremium} onPremium={()=>setShowPaywall(true)} dark={dark} session={session} onSignOut={handleSignOut} onSignIn={()=>setShowAuth(true)}/>}
         </div>
 
