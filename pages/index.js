@@ -153,6 +153,26 @@ async function getUser(accessToken) {
   } catch { return null; }
 }
 
+// Fetch the user's profile row (is_premium, plan) from the profiles table.
+// Used to keep isPremium in sync with what Stripe webhooks have written.
+async function fetchProfile(accessToken, userId) {
+  if (!accessToken || !userId) return null;
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=is_premium,premium_plan`,
+      {
+        headers: {
+          "apikey": SUPABASE_ANON,
+          "Authorization": `Bearer ${accessToken}`,
+          "Accept": "application/json",
+        },
+      }
+    );
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows[0] || null : null;
+  } catch { return null; }
+}
+
 async function signOut(accessToken) {
   return supabaseRequest("/auth/v1/logout", {
     method: "POST",
@@ -197,26 +217,31 @@ const CAT_ICONS = {
 };
 
 const SOURCES = [
-  { id: "lemonde", name: "Le Monde", orientation: "centre-gauche", orientationScore: 2, factuality: "Élevée", owner: "Xavier Niel / Matthieu Pigasse", ownerType: "milliardaires indépendants", logo: "LM", color: "#2471a3" },
-  { id: "lefigaro", name: "Le Figaro", orientation: "droite", orientationScore: 4, factuality: "Élevée", owner: "Famille Dassault", ownerType: "groupe industriel", logo: "LF", color: "#922b21" },
-  { id: "liberation", name: "Libération", orientation: "gauche", orientationScore: 1, factuality: "Élevée", owner: "Altice / Patrick Drahi", ownerType: "milliardaire télécom", logo: "LIB", color: "#c0392b" },
+  // Bias scale 0-6: 0=ext-gauche, 1=gauche, 2=centre-gauche, 3=centre,
+  // 4=centre-droite, 5=droite, 6=droite extrême. orientationScore drives
+  // bucketing for blindspot detection (gauche ≤2, centre =3, droite ≥4).
   { id: "mediapart", name: "Médiapart", orientation: "gauche", orientationScore: 0, factuality: "Élevée", owner: "Indépendant", ownerType: "indépendant", logo: "MP", color: "#e74c3c" },
+  { id: "humanite", name: "L'Humanité", orientation: "gauche", orientationScore: 0, factuality: "Moyenne", owner: "Société coopérative", ownerType: "indépendant", logo: "HUM", color: "#922b21" },
+  { id: "blast", name: "Blast", orientation: "gauche", orientationScore: 0, factuality: "Moyenne", owner: "Indépendant", ownerType: "indépendant", logo: "BL", color: "#6c3483" },
+  { id: "liberation", name: "Libération", orientation: "gauche", orientationScore: 1, factuality: "Élevée", owner: "Altice / Patrick Drahi", ownerType: "milliardaire télécom", logo: "LIB", color: "#c0392b" },
+  { id: "lobs", name: "L'Obs", orientation: "centre-gauche", orientationScore: 2, factuality: "Élevée", owner: "Groupe Le Monde", ownerType: "milliardaires indépendants", logo: "OBS", color: "#a04000" },
+  { id: "lemonde", name: "Le Monde", orientation: "centre-gauche", orientationScore: 2, factuality: "Élevée", owner: "Xavier Niel / Matthieu Pigasse", ownerType: "milliardaires indépendants", logo: "LM", color: "#2471a3" },
+  { id: "marianne", name: "Marianne", orientation: "centre", orientationScore: 3, factuality: "Moyenne", owner: "Czech Media Invest (Kretinsky)", ownerType: "milliardaire étranger", logo: "MAR", color: "#1a5276" },
   { id: "bfmtv", name: "BFMTV", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "Altice / Patrick Drahi", ownerType: "milliardaire télécom", logo: "BFM", color: "#1a6fa8" },
-  { id: "lesechos", name: "Les Échos", orientation: "centre-droite", orientationScore: 4, factuality: "Élevée", owner: "Bernard Arnault (LVMH)", ownerType: "milliardaire luxe", logo: "LE", color: "#0e6655" },
-  { id: "cnews", name: "CNews", orientation: "droite extrême", orientationScore: 5, factuality: "Mixte", owner: "Vincent Bolloré (Vivendi)", ownerType: "milliardaire conservateur", logo: "CN", color: "#555" },
   { id: "franceinfo", name: "France Info", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "France Télévisions", ownerType: "service public", logo: "FI", color: "#d35400" },
   { id: "france24", name: "France 24", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "France Médias Monde", ownerType: "service public", logo: "F24", color: "#1e8449" },
   { id: "leparisien", name: "Le Parisien", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "Bernard Arnault (LVMH)", ownerType: "milliardaire luxe", logo: "LP", color: "#a04000" },
-  { id: "blast", name: "Blast", orientation: "gauche", orientationScore: 0, factuality: "Moyenne", owner: "Indépendant", ownerType: "indépendant", logo: "BL", color: "#6c3483" },
-  { id: "marianne", name: "Marianne", orientation: "centre-gauche", orientationScore: 2, factuality: "Moyenne", owner: "Czech Media Invest", ownerType: "milliardaire étranger", logo: "MAR", color: "#1a5276" },
-  { id: "lepoint", name: "Le Point", orientation: "droite", orientationScore: 4, factuality: "Élevée", owner: "François Pinault", ownerType: "milliardaire luxe", logo: "PT", color: "#2e4057" },
-  { id: "valeursactuelles", name: "Valeurs Actuelles", orientation: "droite extrême", orientationScore: 5, factuality: "Faible", owner: "Groupe Valmonde", ownerType: "groupe conservateur", logo: "VA", color: "#616a6b" },
-  { id: "20minutes", name: "20 Minutes", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "Rossel", ownerType: "groupe de presse", logo: "20M", color: "#1e8449" },
+  { id: "20minutes", name: "20 Minutes", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "Rossel / Ouest-France", ownerType: "groupe de presse", logo: "20M", color: "#1e8449" },
   { id: "ouestfrance", name: "Ouest-France", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "Association SIPA", ownerType: "indépendant", logo: "OF", color: "#2e4057" },
-  { id: "lobs", name: "L'Obs", orientation: "centre-gauche", orientationScore: 1, factuality: "Élevée", owner: "Groupe Le Monde", ownerType: "milliardaires indépendants", logo: "OBS", color: "#a04000" },
-  { id: "humanite", name: "L'Humanité", orientation: "gauche", orientationScore: 0, factuality: "Moyenne", owner: "Société coopérative", ownerType: "indépendant", logo: "HUM", color: "#922b21" },
+  { id: "rtl", name: "RTL", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "Groupe M6 (RTL Group / Bertelsmann)", ownerType: "groupe de médias", logo: "RTL", color: "#e67e22" },
   { id: "lacroix", name: "La Croix", orientation: "centre", orientationScore: 3, factuality: "Élevée", owner: "Groupe Bayard", ownerType: "groupe catholique", logo: "CRX", color: "#6c3483" },
+  { id: "lesechos", name: "Les Échos", orientation: "centre-droite", orientationScore: 4, factuality: "Élevée", owner: "Bernard Arnault (LVMH)", ownerType: "milliardaire luxe", logo: "LE", color: "#0e6655" },
   { id: "lexpress", name: "L'Express", orientation: "centre-droite", orientationScore: 4, factuality: "Élevée", owner: "Alain Weill / Altice", ownerType: "milliardaire télécom", logo: "EXP", color: "#922b21" },
+  { id: "lefigaro", name: "Le Figaro", orientation: "droite", orientationScore: 5, factuality: "Élevée", owner: "Famille Dassault", ownerType: "groupe industriel", logo: "LF", color: "#922b21" },
+  { id: "lepoint", name: "Le Point", orientation: "droite", orientationScore: 5, factuality: "Élevée", owner: "François Pinault", ownerType: "milliardaire luxe", logo: "PT", color: "#2e4057" },
+  { id: "contrepoints", name: "Contrepoints", orientation: "droite", orientationScore: 5, factuality: "Moyenne", owner: "Association libérale indépendante", ownerType: "indépendant", logo: "CP", color: "#7f8c8d" },
+  { id: "cnews", name: "CNews", orientation: "droite extrême", orientationScore: 6, factuality: "Mixte", owner: "Vincent Bolloré (Vivendi)", ownerType: "milliardaire conservateur", logo: "CN", color: "#555" },
+  { id: "valeursactuelles", name: "Valeurs Actuelles", orientation: "droite extrême", orientationScore: 6, factuality: "Faible", owner: "Groupe Valmonde", ownerType: "groupe conservateur", logo: "VA", color: "#616a6b" },
 ];
 
 const CATEGORIES = ["Tout", "Politique", "Économie", "International", "Social", "Justice", "Sport", "Culture", "Faits divers", "Médias", "Technologie", "Environnement"];
@@ -265,7 +290,7 @@ function updateProfile(sourceIds) {
     const p=getProfile(); p.total+=1;
     (sourceIds||[]).forEach(id => {
       const s=getSource(id); const sc=s.orientationScore;
-      if(sc<=1) p.gauche++; else if(sc<=3) p.centre++; else p.droite++;
+      if(sc<=2) p.gauche++; else if(sc===3) p.centre++; else p.droite++;
       p.sources[id]=(p.sources[id]||0)+1;
     });
     localStorage.setItem(PROFILE_KEY,JSON.stringify(p));
@@ -646,8 +671,8 @@ function StoryModal({story, onClose}) {
     } catch {}
   }
 
-  const gauche = articles.filter(a=>(getSource(a.sourceId||a.source_id)?.orientationScore??3)<=1);
-  const centre = articles.filter(a=>{const s=getSource(a.sourceId||a.source_id)?.orientationScore??3;return s>1&&s<4;});
+  const gauche = articles.filter(a=>(getSource(a.sourceId||a.source_id)?.orientationScore??3)<=2);
+  const centre = articles.filter(a=>(getSource(a.sourceId||a.source_id)?.orientationScore??3)===3);
   const droite = articles.filter(a=>(getSource(a.sourceId||a.source_id)?.orientationScore??3)>=4);
   const buckets = [{key:"Gauche",color:"#e74c3c",bg:"#1c0808",items:gauche},{key:"Centre",color:"#888",bg:"#111",items:centre},{key:"Droite",color:"#3d7ebf",bg:"#080f1c",items:droite}].filter(b=>b.items.length>0);
 
@@ -1058,7 +1083,7 @@ function SuivreTab({isPremium, onPremium, dark, session}) {
   const followedCount = interests.length;
   const sourcesFiltered = sourceFilter==="all" ? SOURCES : SOURCES.filter(s=>{
     const score = s.orientationScore;
-    return sourceFilter==="gauche"?score<=1:sourceFilter==="centre"?score>1&&score<4:score>=4;
+    return sourceFilter==="gauche"?score<=2:sourceFilter==="centre"?score===3:score>=4;
   });
 
   const segBtn = (id, label, count) => {
@@ -1695,7 +1720,7 @@ function AskMVTab({isPremium, onPremium, dark, session}) {
 // ── Sources Tab ───────────────────────────────────────────────────────────────
 function SourcesTab() {
   const [filter, setFilter] = useState("all");
-  const filtered = filter==="all"?SOURCES:SOURCES.filter(s=>filter==="gauche"?s.orientationScore<=1:filter==="centre"?s.orientationScore>1&&s.orientationScore<4:s.orientationScore>=4);
+  const filtered = filter==="all"?SOURCES:SOURCES.filter(s=>filter==="gauche"?s.orientationScore<=2:filter==="centre"?s.orientationScore===3:s.orientationScore>=4);
   return (
     <div style={{paddingBottom:"80px"}}>
       <div style={{display:"flex",gap:"6px",marginBottom:"12px"}}>
@@ -2165,6 +2190,7 @@ function MédiaVueApp() {
         setSession(fullSession);
         setShowAuth(false);
         setAuthChecked(true);
+        if (user?.id) fetchProfile(fullSession.access_token, user.id).then(p => p?.is_premium && setIsPremium(true));
       });
       return;
     }
@@ -2174,11 +2200,28 @@ function MédiaVueApp() {
     if (stored?.access_token) {
       setSession(stored);
       setShowAuth(false);
+      if (stored.user?.id) fetchProfile(stored.access_token, stored.user.id).then(p => p?.is_premium && setIsPremium(true));
     } else {
       setShowAuth(true);
     }
     setAuthChecked(true);
   }, []);
+
+  // Refresh premium status when returning from Stripe checkout
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!session?.access_token || !session?.user?.id) return;
+    if (window.location.search.includes("payment=success")) {
+      // The webhook may take a moment — retry a couple of times.
+      let attempts = 0;
+      const tick = async () => {
+        const p = await fetchProfile(session.access_token, session.user.id);
+        if (p?.is_premium) { setIsPremium(true); return; }
+        if (++attempts < 5) setTimeout(tick, 1500);
+      };
+      tick();
+    }
+  }, [session?.access_token, session?.user?.id]);
 
   // Apply theme to body
   useEffect(() => {
