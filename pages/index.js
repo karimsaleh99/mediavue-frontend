@@ -5,6 +5,21 @@ import Head from "next/head";
 const API_URL = "https://mediavue-backend-production.up.railway.app";
 const FREE_LIMIT = 5;
 
+// Module-level API GET cache. Dedupes the same /api/stories call across tabs
+// (FeedTab, InterestsTab, SuivreTab all fetch it independently). TTL kept
+// short so refreshes still surface within a minute. Errors are not cached.
+const _apiCache = new Map();
+const API_CACHE_TTL_MS = 30_000;
+async function apiGet(path) {
+  const now = Date.now();
+  const hit = _apiCache.get(path);
+  if (hit && now - hit.at < API_CACHE_TTL_MS) return hit.promise;
+  const promise = fetch(`${API_URL}${path}`).then(r => r.json());
+  promise.catch(() => _apiCache.delete(path));
+  _apiCache.set(path, { at: now, promise });
+  return promise;
+}
+
 // Ask MV branding — single source of truth. Change here to rename everywhere.
 const ASK_NAME = "Ask MV";
 
@@ -862,8 +877,7 @@ function AngleMortTab({isPremium, onPremium}) {
   const [filter, setFilter] = useState("all");
 
   useEffect(()=>{
-    fetch(`${API_URL}/api/stories?limit=100`)
-      .then(r=>r.json())
+    apiGet(`/api/stories?limit=100`)
       .then(d=>{setStories((d.stories||[]).filter(s=>s.blindspot));setLoading(false);})
       .catch(()=>setLoading(false));
   },[]);
@@ -1062,8 +1076,7 @@ function SuivreTab({isPremium, onPremium, dark, session}) {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${API_URL}/api/stories?limit=50`)
-      .then(r=>r.json())
+    apiGet(`/api/stories?limit=50`)
       .then(d=>{setStories(d.stories||[]);setLoading(false);})
       .catch(()=>setLoading(false));
   }, []);
@@ -1770,8 +1783,7 @@ function FeedTab({isPremium, onPremium, dark}) {
   useEffect(()=>{
     setLoading(true);
     const cat=category!=="Tout"?`&category=${encodeURIComponent(category)}`:"";
-    fetch(`${API_URL}/api/stories?limit=50${cat}`)
-      .then(r=>r.json())
+    apiGet(`/api/stories?limit=50${cat}`)
       .then(d=>{setStories(d.stories||[]);setLoading(false);})
       .catch(()=>{setError("Impossible de charger. Réessayez.");setLoading(false);});
   },[category]);
@@ -2276,6 +2288,14 @@ function MédiaVueApp() {
         <meta name="apple-mobile-web-app-capable" content="yes"/>
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
         <meta name="apple-mobile-web-app-title" content="MédiaVue"/>
+        {/* Preconnect + dns-prefetch: pre-warm TCP+TLS to services we always hit */}
+        <link rel="preconnect" href={API_URL} crossOrigin="anonymous"/>
+        <link rel="preconnect" href={SUPABASE_URL} crossOrigin="anonymous"/>
+        <link rel="preconnect" href="https://icons.duckduckgo.com" crossOrigin="anonymous"/>
+        <link rel="preconnect" href="https://fr.wikipedia.org" crossOrigin="anonymous"/>
+        <link rel="dns-prefetch" href="https://upload.wikimedia.org"/>
+        <link rel="preconnect" href="https://fonts.googleapis.com"/>
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous"/>
       </Head>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;600&display=swap');
