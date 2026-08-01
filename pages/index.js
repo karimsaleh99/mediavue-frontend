@@ -390,7 +390,9 @@ function SrcChip({id, size=26}) {
 }
 
 // ── Animated Bias Bar ─────────────────────────────────────────────────────────
-function BiasBar({cov, animate=false}) {
+// Ground News-inspired: prominent percentages above a chunky bar. Signature
+// element — big, unambiguous, this is the product's value in one line.
+function BiasBar({cov, animate=false, compact=false}) {
   const [visible, setVisible] = useState(!animate);
   const ref = useRef();
   useEffect(() => {
@@ -403,21 +405,35 @@ function BiasBar({cov, animate=false}) {
   const g=cov?.gauche||0, c=cov?.centre||0, d=cov?.droite||0, total=g+c+d;
   if (!total) return null;
   const gPct=Math.round((g/total)*100), cPct=Math.round((c/total)*100), dPct=Math.round((d/total)*100);
+  const L="#dc2626", C="#71717a", R="#2563eb";
+  const barH = compact ? "6px" : "10px";
+  const lblSize = compact ? "9px" : "10px";
+  const numSize = compact ? "10px" : "12px";
   return (
     <div ref={ref}>
-      <div style={{display:"flex",height:"5px",borderRadius:"3px",overflow:"hidden",background:"#222",gap:"2px"}}>
-        <div style={{width:visible?`${gPct}%`:"0%",background:"#e74c3c",transition:"width 0.8s ease",borderRadius:"3px"}} />
-        <div style={{width:visible?`${cPct}%`:"0%",background:"#555",transition:"width 0.8s ease 0.1s",borderRadius:"3px"}} />
-        <div style={{width:visible?`${dPct}%`:"0%",background:"#3d7ebf",transition:"width 0.8s ease 0.2s",borderRadius:"3px"}} />
+      {!compact && (
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:"7px",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.04em"}}>
+          <div style={{display:"flex",gap:"12px"}}>
+            <span style={{fontSize:lblSize,color:L,fontWeight:600}}>{gPct}%<span style={{opacity:0.55,marginLeft:"3px",fontSize:"8px"}}>GAUCHE</span></span>
+            <span style={{fontSize:lblSize,color:C,fontWeight:600}}>{cPct}%<span style={{opacity:0.55,marginLeft:"3px",fontSize:"8px"}}>CENTRE</span></span>
+            <span style={{fontSize:lblSize,color:R,fontWeight:600}}>{dPct}%<span style={{opacity:0.55,marginLeft:"3px",fontSize:"8px"}}>DROITE</span></span>
+          </div>
+          <span style={{fontSize:"9px",color:"#8a8271"}}>{total} src</span>
+        </div>
+      )}
+      <div style={{display:"flex",height:barH,borderRadius:"6px",overflow:"hidden",background:"rgba(120,120,120,0.12)"}}>
+        <div style={{width:visible?`${gPct}%`:"0%",background:L,transition:"width 0.9s cubic-bezier(0.22,1,0.36,1)"}}/>
+        <div style={{width:visible?`${cPct}%`:"0%",background:C,transition:"width 0.9s cubic-bezier(0.22,1,0.36,1) 0.08s"}}/>
+        <div style={{width:visible?`${dPct}%`:"0%",background:R,transition:"width 0.9s cubic-bezier(0.22,1,0.36,1) 0.16s"}}/>
       </div>
-      <div style={{display:"flex",gap:"14px",marginTop:"6px"}}>
-        {[["Gauche",g,"#e74c3c"],["Centre",c,"#888"],["Droite",d,"#3d7ebf"]].map(([label,val,color])=>(
-          <span key={label} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:val>0?color:"#2a2a2a",display:"flex",alignItems:"center",gap:"4px"}}>
-            <span style={{width:5,height:5,borderRadius:"50%",background:val>0?color:"#2a2a2a",display:"inline-block"}}/>
-            {label} {val}
-          </span>
-        ))}
-      </div>
+      {compact && (
+        <div style={{display:"flex",gap:"10px",marginTop:"6px",fontFamily:"'IBM Plex Mono',monospace",fontSize:numSize,letterSpacing:"0.03em"}}>
+          <span style={{color:L,fontWeight:600}}>{gPct}<span style={{opacity:0.5}}>%G</span></span>
+          <span style={{color:C,fontWeight:600}}>{cPct}<span style={{opacity:0.5}}>%C</span></span>
+          <span style={{color:R,fontWeight:600}}>{dPct}<span style={{opacity:0.5}}>%D</span></span>
+          <span style={{color:"#8a8271",marginLeft:"auto"}}>{total} src</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -588,78 +604,111 @@ function SrcName({id, size="sm"}) {
   );
 }
 
-// ── Story Card ────────────────────────────────────────────────────────────────
-function StoryCard({story, onClick, locked, onLock}) {
+// ── Story Card (Ground-News-inspired) ────────────────────────────────────────
+// Bold, data-forward. Big prominent bias percentages, tight editorial typography,
+// no fancy shadow theatrics — the coverage split IS the visual.
+function StoryCard({story, onClick, locked, onLock, dark=true}) {
   const cov = story.coverageByOrientation||story.coverage_by_orientation||{};
   const srcIds = story.sourceIds||story.source_ids||[];
   const articleImg = getStoryImage(story);
   const breaking = isBreaking(story);
   const catIcon = CAT_ICONS[story.category]||CAT_ICONS["default"];
-  const gradient = getCategoryGradient(story.category);
+
+  const surfaceBg = dark ? "#141414" : "#ffffff";
+  const surfaceBorder = dark ? "#222" : "#e8e2d0";
+  const surfaceHover = dark ? "#333" : "#c9c0a8";
+  const titleColor = dark ? "#f5f2ed" : "#1a1a1a";
+  const summaryColor = dark ? "#8a8a8a" : "#5c5449";
+  const metaColor = dark ? "#5a5a5a" : "#8a8271";
+  const catBg = dark ? "#0f0f0f" : "#f4efe5";
+  const catBorder = dark ? "#232323" : "#e2d9c7";
 
   return (
-    <div onClick={locked?onLock:()=>onClick(story)}
-      style={{background:"#161616",borderRadius:"16px",overflow:"hidden",cursor:"pointer",marginBottom:"12px",border:"1px solid #1e1e1e",transition:"border-color 0.2s,transform 0.15s,box-shadow 0.2s",position:"relative",boxShadow:"0 2px 12px rgba(0,0,0,0.3)"}}
-      onMouseEnter={e=>{e.currentTarget.style.borderColor="#333";e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(0,0,0,0.4)";}}
-      onMouseLeave={e=>{e.currentTarget.style.borderColor="#1e1e1e";e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,0.3)";}}>
+    <article
+      onClick={locked?onLock:()=>onClick(story)}
+      style={{
+        background: surfaceBg,
+        borderRadius: "16px",
+        overflow: "hidden",
+        cursor: "pointer",
+        marginBottom: "14px",
+        border: `1px solid ${surfaceBorder}`,
+        transition: "border-color 0.2s, transform 0.15s",
+        position: "relative",
+      }}
+      onMouseEnter={e=>{e.currentTarget.style.borderColor=surfaceHover;e.currentTarget.style.transform="translateY(-1px)";}}
+      onMouseLeave={e=>{e.currentTarget.style.borderColor=surfaceBorder;e.currentTarget.style.transform="translateY(0)";}}>
 
       {locked && (
-        <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,transparent 30%,#0f0f0f 75%)",zIndex:2,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingBottom:"18px",borderRadius:"16px"}}>
-          <div style={{display:"flex",alignItems:"center",gap:"6px",background:"#e74c3c",color:"white",padding:"8px 18px",borderRadius:"20px",fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.1em"}}>🔒 Passer à Premium</div>
+        <div style={{position:"absolute",inset:0,background:`linear-gradient(to bottom,transparent 40%,${dark?"rgba(15,15,15,0.98)":"rgba(244,239,229,0.98)"} 80%)`,zIndex:2,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingBottom:"22px",borderRadius:"16px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"7px",background:"#e74c3c",color:"white",padding:"10px 22px",borderRadius:"999px",fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.12em",fontWeight:600}}>🔒 PASSER À PREMIUM</div>
         </div>
       )}
 
-      {/* Hero image — article image or gradient fallback */}
-      <div style={{height:"190px",overflow:"hidden",position:"relative",flexShrink:0,background:gradient}}>
-        {articleImg && (
-          <img src={articleImg} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}
-            onError={e=>{e.target.style.display="none";}}/>
-        )}
-        <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.1) 0%,rgba(22,22,22,0.95) 100%)"}}/>
-        {/* Category badge over image */}
-        <div style={{position:"absolute",top:"12px",left:"12px",display:"flex",alignItems:"center",gap:"6px",background:"rgba(0,0,0,0.5)",backdropFilter:"blur(8px)",padding:"5px 10px",borderRadius:"20px",border:"1px solid rgba(255,255,255,0.08)"}}>
-          <span style={{fontSize:"12px"}}>{catIcon}</span>
-          <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"rgba(255,255,255,0.7)",letterSpacing:"0.1em",textTransform:"uppercase"}}>{story.category||"Actualité"}</span>
+      {/* Top meta strip — category + breaking marker. No hero image chrome. */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px 0"}}>
+        <div style={{display:"flex",alignItems:"center",gap:"7px",padding:"4px 10px 4px 8px",background:catBg,border:`1px solid ${catBorder}`,borderRadius:"999px"}}>
+          <span style={{fontSize:"11px"}}>{catIcon}</span>
+          <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.14em",textTransform:"uppercase",color:metaColor,fontWeight:600}}>{story.category||"Actualité"}</span>
         </div>
         {breaking && (
-          <div style={{position:"absolute",top:"12px",right:"12px",display:"flex",alignItems:"center",gap:"5px",background:"#e74c3c",padding:"4px 10px",borderRadius:"4px",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"white",letterSpacing:"0.1em"}}>
-            <span style={{width:5,height:5,borderRadius:"50%",background:"white",display:"inline-block"}}/>BREAKING
+          <div style={{display:"flex",alignItems:"center",gap:"5px",background:"#dc2626",padding:"4px 9px",borderRadius:"4px",fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"white",letterSpacing:"0.14em",fontWeight:700}}>
+            <span style={{width:5,height:5,borderRadius:"50%",background:"white",display:"inline-block",animation:"pulse 1.4s ease infinite"}}/>DIRECT
           </div>
         )}
-        <div style={{position:"absolute",bottom:"12px",right:"12px"}}>
-          <ScorePill score={getScore(cov)}/>
+      </div>
+
+      {/* Headline + image row — image RIGHT, headline dominant */}
+      <div style={{display:"flex",gap:"14px",padding:"12px 18px 14px"}}>
+        <div style={{flex:1,minWidth:0}}>
+          <h3 style={{fontFamily:"'Playfair Display',serif",fontSize:"20px",fontWeight:900,color:titleColor,lineHeight:"1.15",letterSpacing:"-0.015em",margin:"0 0 8px"}}>
+            {story.title}
+          </h3>
+          {story.summary && (
+            <p style={{fontFamily:"'Source Serif 4',serif",fontSize:"13.5px",color:summaryColor,lineHeight:"1.5",margin:0,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>
+              {story.summary}
+            </p>
+          )}
         </div>
+        {articleImg && (
+          <div style={{width:"92px",height:"92px",flexShrink:0,borderRadius:"10px",overflow:"hidden",background:dark?"#0a0a0a":"#f0e9d9"}}>
+            <img src={articleImg} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} onError={e=>{e.currentTarget.parentElement.style.display="none";}}/>
+          </div>
+        )}
       </div>
 
-      <div style={{padding:"14px 15px 15px"}}>
-        <h3 style={{fontFamily:"'Playfair Display',serif",fontSize:"17px",fontWeight:"700",color:"#f0ede8",lineHeight:"1.35",margin:"0 0 8px"}}>{story.title}</h3>
-
-        {story.summary && (
-          <p style={{fontFamily:"'Source Serif 4',serif",fontSize:"13px",color:"#505050",lineHeight:"1.55",margin:"0 0 12px"}}>
-            {story.summary.slice(0,110)}{story.summary.length>110?"…":""}
-          </p>
-        )}
-
+      {/* BIAS — the star of the card. Big percentages above a chunky bar. */}
+      <div style={{padding:"0 18px 14px",borderTop:`1px solid ${dark?"#1c1c1c":"#efe8d6"}`,paddingTop:"14px",marginTop:"2px"}}>
         <BiasBar cov={cov} animate={true}/>
-
-        {story.blindspot && (
-          <div style={{marginTop:"10px",padding:"8px 11px",background:"#1a1200",border:"1px solid #2e2000",borderRadius:"7px",display:"flex",alignItems:"center",gap:"7px"}}>
-            <span style={{fontSize:"11px"}}>⚠️</span>
-            <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#c8960c",letterSpacing:"0.05em"}}>
-              ANGLE MORT · {story.blindspot.sides?.join(" & ")||story.blindspot.label}
-            </span>
-          </div>
-        )}
-
-        {srcIds.length>0 && (
-          <div style={{display:"flex",gap:"5px",marginTop:"11px",flexWrap:"wrap",alignItems:"center"}}>
-            {srcIds.slice(0,4).map(id=><SrcName key={id} id={id} size="sm"/>)}
-            {srcIds.length>4 && <div style={{display:"inline-flex",alignItems:"center",padding:"3px 8px",background:"#1f1f1f",borderRadius:"5px",fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",color:"#333"}}>+{srcIds.length-4}</div>}
-            <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#2a2a2a",marginLeft:"auto"}}>{story.coverageCount||story.coverage_count||srcIds.length} sources</span>
-          </div>
-        )}
       </div>
-    </div>
+
+      {/* Blindspot alert — high-contrast, above sources */}
+      {story.blindspot && (
+        <div style={{margin:"0 18px 12px",padding:"10px 12px",background:dark?"#1a1200":"#fef3c7",borderLeft:"3px solid #d97706",borderRadius:"0 6px 6px 0",display:"flex",alignItems:"center",gap:"8px"}}>
+          <span style={{fontSize:"12px"}}>⚠</span>
+          <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",color:dark?"#e0a02c":"#92400e",letterSpacing:"0.06em",fontWeight:600}}>
+            ANGLE MORT — {story.blindspot.sides?.join(" & ")||story.blindspot.label}
+          </span>
+        </div>
+      )}
+
+      {/* Footer — source logos + count. Cleaner than a wall of colored chips. */}
+      {srcIds.length>0 && (
+        <div style={{display:"flex",alignItems:"center",padding:"12px 18px 16px",borderTop:`1px solid ${dark?"#1c1c1c":"#efe8d6"}`,gap:"10px"}}>
+          <div style={{display:"flex"}}>
+            {srcIds.slice(0,5).map((id,i)=>(
+              <div key={id} style={{marginLeft:i===0?0:"-8px",boxShadow:`0 0 0 2px ${surfaceBg}`,borderRadius:"6px",position:"relative",zIndex:5-i}}>
+                <SrcChip id={id} size={26}/>
+              </div>
+            ))}
+          </div>
+          <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",color:metaColor,letterSpacing:"0.04em",fontWeight:600}}>
+            {story.coverageCount||story.coverage_count||srcIds.length} sources
+          </span>
+          <span style={{marginLeft:"auto",fontFamily:"'IBM Plex Mono',monospace",fontSize:"11px",color:metaColor}}>→</span>
+        </div>
+      )}
+    </article>
   );
 }
 
@@ -824,7 +873,7 @@ function BriefingStoryItem({story, onClick, index, total}) {
     </div>
   );
 }
-function DailyBriefing({stories, onStoryClick, isPremium, onPremium}) {
+function DailyBriefing({stories, onStoryClick, isPremium, onPremium, dark=true}) {
   const today = new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
   const topStories = stories.slice(0,3);
   const biggestBlindspot = stories.find(s=>s.blindspot);
@@ -870,7 +919,7 @@ function DailyBriefing({stories, onStoryClick, isPremium, onPremium}) {
 }
 
 // ── Angle Mort Tab ────────────────────────────────────────────────────────────
-function AngleMortTab({isPremium, onPremium}) {
+function AngleMortTab({isPremium, onPremium, dark=true}) {
   const [stories, setStories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
@@ -930,7 +979,7 @@ function AngleMortTab({isPremium, onPremium}) {
       )}
       {!loading&&filtered.map((s,i)=>(
         <div key={s.id||i} style={{animation:`fadeUp 0.3s ease ${i*0.04}s both`}}>
-          <StoryCard story={s} onClick={handleClick} locked={false} onLock={()=>{}}/>
+          <StoryCard story={s} dark={dark} onClick={handleClick} locked={false} onLock={()=>{}}/>
         </div>
       ))}
       {selected&&<StoryModal story={selected} onClose={()=>setSelected(null)}/>}
@@ -1215,7 +1264,7 @@ function SuivreTab({isPremium, onPremium, dark, session}) {
 
       {!loading && filtered.map((s,i)=>(
         <div key={s.id||i} style={{animation:`fadeUp 0.3s ease ${Math.min(i,8)*0.035}s both`}}>
-          <StoryCard story={s} onClick={(story)=>{setSelected(story);bumpStreak();updateProfile(story.sourceIds||story.source_ids||[]);}} locked={false} onLock={()=>{}}/>
+          <StoryCard story={s} dark={dark} onClick={(story)=>{setSelected(story);bumpStreak();updateProfile(story.sourceIds||story.source_ids||[]);}} locked={false} onLock={()=>{}}/>
         </div>
       ))}
 
@@ -1846,7 +1895,7 @@ function FeedTab({isPremium, onPremium, dark}) {
             <span style={{width:6,height:6,borderRadius:"50%",background:"#e74c3c",display:"inline-block"}}/>
             <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.12em",textTransform:"uppercase",color:"#e74c3c"}}>Breaking News</span>
           </div>
-          {breaking.map((s,i)=><StoryCard key={s.id||i} story={s} onClick={handleClick} locked={!isPremium&&reads>=FREE_LIMIT} onLock={()=>setShowPaywall(true)}/>)}
+          {breaking.map((s,i)=><StoryCard key={s.id||i} story={s} dark={dark} onClick={handleClick} locked={!isPremium&&reads>=FREE_LIMIT} onLock={()=>setShowPaywall(true)}/>)}
           <div style={{height:"1px",background:"#191919",margin:"14px 0"}}/>
         </div>
       )}
@@ -1854,13 +1903,13 @@ function FeedTab({isPremium, onPremium, dark}) {
       {/* First 3 regular stories */}
       {!loading&&!error&&regular.slice(0,3).map((s,i)=>(
         <div key={s.id||i} style={{animation:`fadeUp 0.3s ease ${Math.min(i,8)*0.035}s both`}}>
-          <StoryCard story={s} onClick={handleClick} locked={!isPremium&&reads+i>=FREE_LIMIT} onLock={()=>setShowPaywall(true)}/>
+          <StoryCard story={s} dark={dark} onClick={handleClick} locked={!isPremium&&reads+i>=FREE_LIMIT} onLock={()=>setShowPaywall(true)}/>
         </div>
       ))}
 
       {/* Daily briefing — after the first batch of headlines */}
       {!loading&&stories.length>0&&category==="Tout"&&!search&&(
-        <DailyBriefing stories={filtered} onStoryClick={handleClick} isPremium={isPremium} onPremium={onPremium}/>
+        <DailyBriefing stories={filtered} onStoryClick={handleClick} isPremium={isPremium} onPremium={onPremium} dark={dark}/>
       )}
 
       {/* Trending — stories + politicians gaining traction */}
@@ -1881,7 +1930,7 @@ function FeedTab({isPremium, onPremium, dark}) {
       {/* Remaining regular stories */}
       {!loading&&!error&&regular.slice(3).map((s,i)=>(
         <div key={s.id||(i+3)} style={{animation:`fadeUp 0.3s ease ${Math.min(i+3,8)*0.035}s both`}}>
-          <StoryCard story={s} onClick={handleClick} locked={!isPremium&&reads+i+3>=FREE_LIMIT} onLock={()=>setShowPaywall(true)}/>
+          <StoryCard story={s} dark={dark} onClick={handleClick} locked={!isPremium&&reads+i+3>=FREE_LIMIT} onLock={()=>setShowPaywall(true)}/>
         </div>
       ))}
 
