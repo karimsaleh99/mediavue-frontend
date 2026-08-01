@@ -984,7 +984,7 @@ function PoliticianPicker({selected, onToggle, dark}) {
       {POLITICIANS.map(p=>{
         const active = selected.includes(p.id);
         return (
-          <button key={p.id} onClick={()=>onToggle(p.id)} style={{display:"flex",alignItems:"center",gap:"9px",background:active?"#1c0808":(dark?"#0f0f0f":"#fff"),border:`1px solid ${active?"#e74c3c":(dark?"#1f1f1f":"#e8e6e0")}`,borderRadius:"10px",padding:"9px 11px",cursor:"pointer",textAlign:"left"}}>
+          <button key={p.id} onClick={()=>onToggle(p.id)} style={{display:"flex",alignItems:"center",gap:"9px",background:active?"#1c0808":(dark?"#0f0f0f":"#fdfaf3"),border:`1px solid ${active?"#e74c3c":(dark?"#1f1f1f":"#e2d9c7")}`,borderRadius:"10px",padding:"9px 11px",cursor:"pointer",textAlign:"left"}}>
             <PoliticianAvatar politician={p} size={32}/>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"12px",color:active?"#e74c3c":(dark?"#d4cfc2":"#111"),fontWeight:"600",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
@@ -1017,7 +1017,7 @@ function TrendingCard({stories, interests, onFollowPolitician, onStoryClick, dar
   if (trendingStories.length === 0 && mentionCounts.length === 0) return null;
 
   const cardBg = dark ? "#121212" : "#fafaf8";
-  const border = dark ? "#1f1f1f" : "#e8e6e0";
+  const border = dark ? "#1f1f1f" : "#e2d9c7";
 
   return (
     <div style={{background:cardBg,border:`1px solid ${border}`,borderRadius:"14px",padding:"16px",marginBottom:"14px"}}>
@@ -1102,7 +1102,7 @@ function SuivreTab({isPremium, onPremium, dark, session}) {
   const segBtn = (id, label, count) => {
     const active = view === id;
     return (
-      <button onClick={()=>{setView(id);setPicking(false);}} style={{flex:1,fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.08em",padding:"9px",background:active?"#1c0808":(dark?"#0f0f0f":"#fff"),color:active?"#e74c3c":(dark?"#888":"#555"),border:`1px solid ${active?"#e74c3c":(dark?"#1f1f1f":"#e8e6e0")}`,borderRadius:"22px",cursor:"pointer"}}>
+      <button onClick={()=>{setView(id);setPicking(false);}} style={{flex:1,fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.08em",padding:"9px",background:active?"#1c0808":(dark?"#0f0f0f":"#fdfaf3"),color:active?"#e74c3c":(dark?"#888":"#555"),border:`1px solid ${active?"#e74c3c":(dark?"#1f1f1f":"#e2d9c7")}`,borderRadius:"22px",cursor:"pointer"}}>
         {label}{count>0 && <span style={{opacity:0.7}}> · {count}</span>}
       </button>
     );
@@ -1118,7 +1118,7 @@ function SuivreTab({isPremium, onPremium, dark, session}) {
         </div>
         <div style={{display:"flex",gap:"6px",marginBottom:"12px",overflowX:"auto"}}>
           {["all","gauche","centre","droite"].map(f=>(
-            <button key={f} onClick={()=>setSourceFilter(f)} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",padding:"5px 12px",border:"1px solid",borderColor:sourceFilter===f?"#e74c3c":(dark?"#1f1f1f":"#e8e6e0"),background:sourceFilter===f?"#1c0808":(dark?"#161616":"#fff"),color:sourceFilter===f?"#e74c3c":(dark?"#3a3a3a":"#888"),cursor:"pointer",borderRadius:"20px",whiteSpace:"nowrap"}}>
+            <button key={f} onClick={()=>setSourceFilter(f)} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",padding:"5px 12px",border:"1px solid",borderColor:sourceFilter===f?"#e74c3c":(dark?"#1f1f1f":"#e2d9c7"),background:sourceFilter===f?"#1c0808":(dark?"#161616":"#fdfaf3"),color:sourceFilter===f?"#e74c3c":(dark?"#3a3a3a":"#888"),cursor:"pointer",borderRadius:"20px",whiteSpace:"nowrap"}}>
               {f==="all"?"Tous":f}
             </button>
           ))}
@@ -1126,7 +1126,7 @@ function SuivreTab({isPremium, onPremium, dark, session}) {
         {sourcesFiltered.map(src=>{
           const isFollowed = followedSources.includes(src.id);
           return (
-            <div key={src.id} style={{background:dark?"#161616":"#fff",border:`1px solid ${isFollowed?"#e74c3c40":(dark?"#1f1f1f":"#e8e6e0")}`,borderRadius:"12px",padding:"13px 15px",marginBottom:"7px",display:"flex",gap:"12px",alignItems:"center"}}>
+            <div key={src.id} style={{background:dark?"#161616":"#fdfaf3",border:`1px solid ${isFollowed?"#e74c3c40":(dark?"#1f1f1f":"#e2d9c7")}`,borderRadius:"12px",padding:"13px 15px",marginBottom:"7px",display:"flex",gap:"12px",alignItems:"center"}}>
               <SrcChip id={src.id} size={40}/>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontFamily:"'Playfair Display',serif",fontSize:"14px",fontWeight:"700",color:dark?"#f0ede8":"#111",marginBottom:"3px"}}>{src.name}</div>
@@ -1136,7 +1136,7 @@ function SuivreTab({isPremium, onPremium, dark, session}) {
                   <span style={{color:"#555"}}>{src.owner?.split(" ").slice(0,3).join(" ")}</span>
                 </div>
               </div>
-              <button onClick={()=>toggleSource(src.id)} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.06em",padding:"7px 12px",border:`1px solid ${isFollowed?"#e74c3c":(dark?"#222":"#ddd")}`,background:isFollowed?"#e74c3c":"transparent",color:isFollowed?"white":(dark?"#888":"#555"),borderRadius:"16px",cursor:"pointer",flexShrink:0}}>
+              <button onClick={()=>toggleSource(src.id)} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.06em",padding:"7px 12px",border:`1px solid ${isFollowed?"#e74c3c":(dark?"#222":"#d9cfba")}`,background:isFollowed?"#e74c3c":"transparent",color:isFollowed?"white":(dark?"#888":"#555"),borderRadius:"16px",cursor:"pointer",flexShrink:0}}>
                 {isFollowed ? "✓ SUIVI" : "+ SUIVRE"}
               </button>
             </div>
@@ -1189,13 +1189,13 @@ function SuivreTab({isPremium, onPremium, dark, session}) {
             {followedCount} suivi{followedCount>1?"s":""} · {filtered.length} histoire{filtered.length!==1?"s":""}
           </div>
         </div>
-        <button onClick={()=>setPicking(true)} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.08em",background:"transparent",color:dark?"#888":"#555",border:`1px solid ${dark?"#222":"#ddd"}`,padding:"6px 11px",borderRadius:"18px",cursor:"pointer"}}>MODIFIER</button>
+        <button onClick={()=>setPicking(true)} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.08em",background:"transparent",color:dark?"#888":"#555",border:`1px solid ${dark?"#222":"#d9cfba"}`,padding:"6px 11px",borderRadius:"18px",cursor:"pointer"}}>MODIFIER</button>
       </div>
 
       {/* Avatars of followed politicians */}
       <div style={{display:"flex",gap:"6px",overflowX:"auto",marginBottom:"14px",paddingBottom:"4px"}}>
         {POLITICIANS.filter(p=>interests.includes(p.id)).map(p=>(
-          <div key={p.id} title={p.name} style={{display:"flex",alignItems:"center",gap:"5px",padding:"3px 10px 3px 3px",background:dark?"#161616":"#fff",border:`1px solid ${dark?"#1f1f1f":"#e8e6e0"}`,borderRadius:"18px",flexShrink:0}}>
+          <div key={p.id} title={p.name} style={{display:"flex",alignItems:"center",gap:"5px",padding:"3px 10px 3px 3px",background:dark?"#161616":"#fdfaf3",border:`1px solid ${dark?"#1f1f1f":"#e2d9c7"}`,borderRadius:"18px",flexShrink:0}}>
             <PoliticianAvatar politician={p} size={22}/>
             <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:dark?"#aaa":"#555",whiteSpace:"nowrap"}}>{p.name.split(" ").pop()}</span>
           </div>
@@ -1460,7 +1460,7 @@ function AskWaitlistCard({dark, session}) {
   }
 
   const card = dark ? "#121212" : "#fafaf8";
-  const border = dark ? "#1f1f1f" : "#e8e6e0";
+  const border = dark ? "#1f1f1f" : "#e2d9c7";
   const text = dark ? "#f0ede8" : "#111";
   const muted = dark ? "#888" : "#666";
 
@@ -1499,7 +1499,7 @@ function AskWaitlistCard({dark, session}) {
               onChange={(e)=>setEmail(e.target.value)}
               placeholder="votre@email.fr"
               disabled={status==="loading"}
-              style={{flex:1,fontFamily:"'Source Serif 4',serif",fontSize:"14px",background:dark?"#0f0f0f":"#fff",border:`1px solid ${border}`,borderRadius:"22px",padding:"10px 14px",color:text,outline:"none"}}
+              style={{flex:1,fontFamily:"'Source Serif 4',serif",fontSize:"14px",background:dark?"#0f0f0f":"#fdfaf3",border:`1px solid ${border}`,borderRadius:"22px",padding:"10px 14px",color:text,outline:"none"}}
             />
             <button type="submit" disabled={status==="loading"} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.1em",background:"#e74c3c",color:"white",border:"none",padding:"0 18px",borderRadius:"22px",cursor:"pointer",opacity:status==="loading"?0.5:1}}>
               {status==="loading" ? "…" : "M'INSCRIRE"}
@@ -2012,8 +2012,8 @@ function OnboardingModal({onDone, dark}) {
     onDone();
   };
 
-  const bg = dark ? "#141414" : "#fff";
-  const border = dark ? "#1f1f1f" : "#e8e6e0";
+  const bg = dark ? "#141414" : "#fdfaf3";
+  const border = dark ? "#1f1f1f" : "#e2d9c7";
   const text = dark ? "#f0ede8" : "#111";
   const muted = dark ? "#888" : "#666";
 
@@ -2064,7 +2064,7 @@ function OnboardingModal({onDone, dark}) {
         {s.pick && (
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"7px",margin:"10px 0 14px"}}>
             {SOURCES.slice(0,12).map(src=>(
-              <button key={src.id} onClick={()=>togglePick(src.id)} style={{background:picked.includes(src.id)?"#1c0808":(dark?"#0f0f0f":"#f6f4ef"),border:`1px solid ${picked.includes(src.id)?"#e74c3c":border}`,borderRadius:"10px",padding:"10px 4px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:"5px"}}>
+              <button key={src.id} onClick={()=>togglePick(src.id)} style={{background:picked.includes(src.id)?"#1c0808":(dark?"#0f0f0f":"#f0e9d9"),border:`1px solid ${picked.includes(src.id)?"#e74c3c":border}`,borderRadius:"10px",padding:"10px 4px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:"5px"}}>
                 <SrcChip id={src.id} size={28}/>
                 <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"8px",color:picked.includes(src.id)?"#e74c3c":muted,letterSpacing:"0.04em",textAlign:"center"}}>{src.name}</span>
               </button>
@@ -2117,8 +2117,8 @@ function PwaInstallBanner({dark}) {
 
   if (!visible) return null;
 
-  const bg = dark ? "#141414" : "#fff";
-  const border = dark ? "#1f1f1f" : "#e8e6e0";
+  const bg = dark ? "#141414" : "#fdfaf3";
+  const border = dark ? "#1f1f1f" : "#e2d9c7";
   const text = dark ? "#f0ede8" : "#111";
 
   return (
@@ -2138,9 +2138,9 @@ function PwaInstallBanner({dark}) {
 function StreakBadge({dark}) {
   const [streak] = useState(getStreak);
   if (!streak.count) return null;
-  const bg = dark ? "#161616" : "#fff";
+  const bg = dark ? "#161616" : "#fdfaf3";
   return (
-    <div style={{display:"flex",alignItems:"center",gap:"10px",background:bg,border:`1px solid ${dark?"#1f1f1f":"#e8e6e0"}`,borderRadius:"12px",padding:"13px 16px",marginBottom:"12px"}}>
+    <div style={{display:"flex",alignItems:"center",gap:"10px",background:bg,border:`1px solid ${dark?"#1f1f1f":"#e2d9c7"}`,borderRadius:"12px",padding:"13px 16px",marginBottom:"12px"}}>
       <div style={{fontSize:"22px"}}>🔥</div>
       <div style={{flex:1}}>
         <div style={{fontFamily:"'Playfair Display',serif",fontSize:"17px",fontWeight:"700",color:dark?"#f0ede8":"#111"}}>{streak.count} jour{streak.count>1?"s":""} de suite</div>
@@ -2157,15 +2157,15 @@ function ReferralCard({dark}) {
   const copy = async () => {
     try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(()=>setCopied(false),1600); } catch {}
   };
-  const bg = dark ? "#161616" : "#fff";
+  const bg = dark ? "#161616" : "#fdfaf3";
   return (
-    <div style={{background:bg,border:`1px solid ${dark?"#1f1f1f":"#e8e6e0"}`,borderRadius:"12px",padding:"16px",marginBottom:"12px"}}>
+    <div style={{background:bg,border:`1px solid ${dark?"#1f1f1f":"#e2d9c7"}`,borderRadius:"12px",padding:"16px",marginBottom:"12px"}}>
       <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",color:"#333",letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:"10px"}}>Inviter un ami</div>
       <div style={{fontFamily:"'Source Serif 4',serif",fontSize:"13px",color:dark?"#888":"#555",marginBottom:"12px",lineHeight:"1.5"}}>
         Partagez votre lien. Chaque ami qui rejoint vous offre +5 lectures gratuites par jour.
       </div>
       <div style={{display:"flex",gap:"7px"}}>
-        <input readOnly value={url} style={{flex:1,fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",background:dark?"#0f0f0f":"#f6f4ef",border:`1px solid ${dark?"#222":"#e0e0e0"}`,color:dark?"#888":"#555",padding:"9px 11px",borderRadius:"18px",outline:"none"}}/>
+        <input readOnly value={url} style={{flex:1,fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",background:dark?"#0f0f0f":"#f0e9d9",border:`1px solid ${dark?"#222":"#e0e0e0"}`,color:dark?"#888":"#555",padding:"9px 11px",borderRadius:"18px",outline:"none"}}/>
         <button onClick={copy} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"10px",letterSpacing:"0.08em",background:"#e74c3c",color:"white",border:"none",padding:"0 16px",borderRadius:"18px",cursor:"pointer"}}>
           {copied ? "COPIÉ ✓" : "COPIER"}
         </button>
@@ -2181,7 +2181,9 @@ function MédiaVueApp() {
   const [showPaywall, setShowPaywall] = useState(false);
   const [session, setSession] = useState(null);
   const [showAuth, setShowAuth] = useState(false);
-  const [dark, setDark] = useState(true);
+  // Salle de lecture: light-mode default for the warm reading-room feel.
+  // Users who previously toggled to dark keep their preference via STREAK_KEY-style storage below.
+  const [dark, setDark] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
@@ -2235,9 +2237,13 @@ function MédiaVueApp() {
     }
   }, [session?.access_token, session?.user?.id]);
 
-  // Apply theme to body
+  // Apply theme to body — cream light / near-black dark, comfortable base type
   useEffect(() => {
-    document.body.style.background = dark ? "#0f0f0f" : "#f8f6f1";
+    document.body.style.background = dark ? "#0f0f0f" : "#f4efe5";
+    document.body.style.color = dark ? "#f0ede8" : "#2a2620";
+    document.body.style.fontSize = "15.5px";
+    document.body.style.lineHeight = "1.55";
+    document.body.style.fontFamily = "'Source Serif 4', Georgia, serif";
     localStorage.setItem(THEME_KEY, dark ? "dark" : "light");
   }, [dark]);
 
@@ -2256,14 +2262,14 @@ function MédiaVueApp() {
     setIsPremium(true); setShowPaywall(false);
   };
 
-  // Theme-aware colors
-  const bg = dark ? "#0f0f0f" : "#f8f6f1";
-  const headerBg = dark ? "#0f0f0f" : "#f8f6f1";
-  const headerBorder = dark ? "#161616" : "#e8e4dc";
-  const navBg = dark ? "#0a0a0a" : "#ffffff";
-  const navBorder = dark ? "#161616" : "#e8e4dc";
-  const textPrimary = dark ? "#f0ede8" : "#1a1a1a";
-  const textMuted = dark ? "#2a2a2a" : "#aaa";
+  // Salle-de-lecture theme — warm cream in light, unchanged dark
+  const bg = dark ? "#0f0f0f" : "#f4efe5";
+  const headerBg = dark ? "#0f0f0f" : "#faf5ea";
+  const headerBorder = dark ? "#161616" : "#e2d9c7";
+  const navBg = dark ? "#0a0a0a" : "#faf5ea";
+  const navBorder = dark ? "#161616" : "#e2d9c7";
+  const textPrimary = dark ? "#f0ede8" : "#2a2620";
+  const textMuted = dark ? "#2a2a2a" : "#948d7f";
 
   const navItems = [
     {id:"news",icon:"📰",label:"Actualités"},
@@ -2300,11 +2306,12 @@ function MédiaVueApp() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;600&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
+        html,body{background:${dark?"#0f0f0f":"#f4efe5"};color:${dark?"#f0ede8":"#2a2620"};font-family:'Source Serif 4',Georgia,serif;font-size:15.5px;line-height:1.55;}
         @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
         @keyframes spin{to{transform:rotate(360deg)}}
-        input::placeholder{color:${dark?"#2a2a2a":"#bbb"};}
+        input::placeholder{color:${dark?"#2a2a2a":"#a89f8c"};}
         ::-webkit-scrollbar{width:3px;height:0;}
-        ::-webkit-scrollbar-thumb{background:${dark?"#1f1f1f":"#ddd"};}
+        ::-webkit-scrollbar-thumb{background:${dark?"#1f1f1f":"#d9cfba"};}
       `}</style>
       <div style={{minHeight:"100vh",background:bg,maxWidth:"480px",margin:"0 auto"}}>
         <header style={{background:headerBg,borderBottom:`1px solid ${headerBorder}`,padding:"13px 15px 10px",position:"sticky",top:0,zIndex:100}}>
@@ -2314,14 +2321,14 @@ function MédiaVueApp() {
             </span>
             <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
               {/* Dark/Light toggle */}
-              <button onClick={()=>setDark(!dark)} style={{background:"none",border:`1px solid ${dark?"#222":"#ddd"}`,borderRadius:"20px",padding:"3px 10px",cursor:"pointer",fontSize:"13px",display:"flex",alignItems:"center",gap:"4px"}}>
+              <button onClick={()=>setDark(!dark)} style={{background:"none",border:`1px solid ${dark?"#222":"#d9cfba"}`,borderRadius:"20px",padding:"3px 10px",cursor:"pointer",fontSize:"13px",display:"flex",alignItems:"center",gap:"4px"}}>
                 <span>{dark?"☀️":"🌙"}</span>
               </button>
 
               {/* Auth button */}
               {session
-                ? <button onClick={handleSignOut} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.06em",background:"none",color:dark?"#333":"#aaa",border:`1px solid ${dark?"#222":"#ddd"}`,padding:"4px 10px",borderRadius:"4px",cursor:"pointer"}}>Déconnexion</button>
-                : <button onClick={()=>setShowAuth(true)} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.06em",background:"none",color:dark?"#555":"#888",border:`1px solid ${dark?"#222":"#ddd"}`,padding:"4px 10px",borderRadius:"4px",cursor:"pointer"}}>Connexion</button>
+                ? <button onClick={handleSignOut} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.06em",background:"none",color:dark?"#333":"#aaa",border:`1px solid ${dark?"#222":"#d9cfba"}`,padding:"4px 10px",borderRadius:"4px",cursor:"pointer"}}>Déconnexion</button>
+                : <button onClick={()=>setShowAuth(true)} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:"9px",letterSpacing:"0.06em",background:"none",color:dark?"#555":"#888",border:`1px solid ${dark?"#222":"#d9cfba"}`,padding:"4px 10px",borderRadius:"4px",cursor:"pointer"}}>Connexion</button>
               }
 
               {isPremium
